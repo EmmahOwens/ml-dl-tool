@@ -87,6 +87,30 @@ export const trainMLModel = (
         case "XGBoost":
           baseAccuracy = 0.88 + Math.random() * 0.07;
           break;
+        case "K-Means":
+          baseAccuracy = 0.72 + Math.random() * 0.18;
+          break;
+        case "DBSCAN":
+          baseAccuracy = 0.74 + Math.random() * 0.16;
+          break;
+        case "PCA":
+          baseAccuracy = 0.65 + Math.random() * 0.25;
+          break;
+        case "LDA":
+          baseAccuracy = 0.68 + Math.random() * 0.22;
+          break;
+        case "Gaussian Process":
+          baseAccuracy = 0.79 + Math.random() * 0.15;
+          break;
+        case "Isolation Forest":
+          baseAccuracy = 0.81 + Math.random() * 0.12;
+          break;
+        case "LightGBM":
+          baseAccuracy = 0.89 + Math.random() * 0.06;
+          break;
+        case "CatBoost":
+          baseAccuracy = 0.90 + Math.random() * 0.05;
+          break;
         default:
           baseAccuracy = 0.70 + Math.random() * 0.20;
       }
@@ -101,6 +125,30 @@ export const trainMLModel = (
       });
     }, 1000 + Math.random() * 2000); // Random delay between 1-3 seconds
   });
+};
+
+// Function to determine if an algorithm is for clustering
+export const isClusteringAlgorithm = (algorithm: Algorithm): boolean => {
+  return ["K-Means", "DBSCAN"].includes(algorithm);
+};
+
+// Function to determine if an algorithm is for dimensionality reduction
+export const isDimensionalityReductionAlgorithm = (algorithm: Algorithm): boolean => {
+  return ["PCA", "LDA"].includes(algorithm);
+};
+
+// Function to determine if an algorithm is for anomaly detection
+export const isAnomalyDetectionAlgorithm = (algorithm: Algorithm): boolean => {
+  return ["Isolation Forest"].includes(algorithm);
+};
+
+// Function to get the model type based on algorithm
+export const getModelTypeForAlgorithm = (algorithm: Algorithm) => {
+  if (algorithm === "Neural Network") return "DL";
+  if (isClusteringAlgorithm(algorithm)) return "Clustering";
+  if (isDimensionalityReductionAlgorithm(algorithm)) return "Dimensionality Reduction";
+  if (isAnomalyDetectionAlgorithm(algorithm)) return "Anomaly Detection";
+  return "ML";
 };
 
 // Function to train all ML models and return the results
@@ -149,6 +197,14 @@ export const trainAllMLModels = async (
     { 
       algorithm: "XGBoost", 
       config: { name: "XGBoost", params: { learningRate: 0.1, maxDepth: 6, nEstimators: 100 } }
+    },
+    { 
+      algorithm: "LightGBM", 
+      config: { name: "LightGBM", params: { learningRate: 0.1, maxDepth: 8, nEstimators: 100 } }
+    },
+    { 
+      algorithm: "CatBoost", 
+      config: { name: "CatBoost", params: { learningRate: 0.05, depth: 6, iterations: 100 } }
     }
   ];
   
@@ -157,6 +213,108 @@ export const trainAllMLModels = async (
     algorithms.map(({ algorithm, config }) => 
       trainMLModel(data, features, target, algorithm, config.params)
     )
+  );
+  
+  return results;
+};
+
+// Function to train clustering models
+export const trainClusteringModels = async (
+  data: any[],
+  features: string[]
+): Promise<TrainingResult[]> => {
+  const algorithms: { algorithm: Algorithm; config: ModelConfig }[] = [
+    { 
+      algorithm: "K-Means", 
+      config: { name: "K-Means", params: { nClusters: 3, maxIter: 300 } }
+    },
+    { 
+      algorithm: "DBSCAN", 
+      config: { name: "DBSCAN", params: { eps: 0.5, minSamples: 5 } }
+    }
+  ];
+  
+  // Train all clustering models in parallel
+  const results = await Promise.all(
+    algorithms.map(({ algorithm, config }) => {
+      // For clustering, we simulate without a target
+      return new Promise<TrainingResult>((resolve) => {
+        setTimeout(() => {
+          const accuracy = 0.70 + Math.random() * 0.20;
+          resolve({
+            algorithm,
+            accuracy: Number(accuracy.toFixed(4)),
+            parameters: config.params,
+          });
+        }, 1000 + Math.random() * 2000);
+      });
+    })
+  );
+  
+  return results;
+};
+
+// Function to train dimensionality reduction models
+export const trainDimensionalityReductionModels = async (
+  data: any[],
+  features: string[]
+): Promise<TrainingResult[]> => {
+  const algorithms: { algorithm: Algorithm; config: ModelConfig }[] = [
+    { 
+      algorithm: "PCA", 
+      config: { name: "PCA", params: { nComponents: 2 } }
+    },
+    { 
+      algorithm: "LDA", 
+      config: { name: "LDA", params: { nComponents: 2 } }
+    }
+  ];
+  
+  // Train all dimensionality reduction models in parallel
+  const results = await Promise.all(
+    algorithms.map(({ algorithm, config }) => {
+      return new Promise<TrainingResult>((resolve) => {
+        setTimeout(() => {
+          const accuracy = 0.65 + Math.random() * 0.25;
+          resolve({
+            algorithm,
+            accuracy: Number(accuracy.toFixed(4)),
+            parameters: config.params,
+          });
+        }, 1000 + Math.random() * 2000);
+      });
+    })
+  );
+  
+  return results;
+};
+
+// Function to train anomaly detection models
+export const trainAnomalyDetectionModels = async (
+  data: any[],
+  features: string[]
+): Promise<TrainingResult[]> => {
+  const algorithms: { algorithm: Algorithm; config: ModelConfig }[] = [
+    { 
+      algorithm: "Isolation Forest", 
+      config: { name: "Isolation Forest", params: { contamination: 0.1, maxSamples: 100 } }
+    }
+  ];
+  
+  // Train all anomaly detection models in parallel
+  const results = await Promise.all(
+    algorithms.map(({ algorithm, config }) => {
+      return new Promise<TrainingResult>((resolve) => {
+        setTimeout(() => {
+          const accuracy = 0.75 + Math.random() * 0.20;
+          resolve({
+            algorithm,
+            accuracy: Number(accuracy.toFixed(4)),
+            parameters: config.params,
+          });
+        }, 1000 + Math.random() * 2000);
+      });
+    })
   );
   
   return results;
@@ -182,4 +340,3 @@ export const analyzeFeatureImportance = (
     importance: Math.random()
   })).sort((a, b) => b.importance - a.importance);
 };
-

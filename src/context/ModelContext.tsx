@@ -14,9 +14,17 @@ export type Algorithm =
   | "Gradient Boosting"
   | "AdaBoost"
   | "Naive Bayes"
-  | "XGBoost";
+  | "XGBoost"
+  | "K-Means"
+  | "DBSCAN"
+  | "PCA"
+  | "LDA"
+  | "Gaussian Process"
+  | "Isolation Forest"
+  | "LightGBM"
+  | "CatBoost";
 
-export type ModelType = "ML" | "DL";
+export type ModelType = "ML" | "DL" | "Clustering" | "Dimensionality Reduction" | "Anomaly Detection";
 
 // Neural network activation function types
 export type ActivationFunction = 
