@@ -8,9 +8,28 @@ export type Algorithm =
   | "Random Forest" 
   | "SVM" 
   | "KNN"
-  | "Neural Network";
+  | "Neural Network"
+  | "Gradient Boosting"
+  | "AdaBoost"
+  | "Naive Bayes"
+  | "XGBoost";
 
 export type ModelType = "ML" | "DL";
+
+// Neural network activation function types
+export type ActivationFunction = 
+  | "ReLU" 
+  | "Sigmoid" 
+  | "Tanh" 
+  | "Linear" 
+  | "Softmax";
+
+// Neural network layer type
+export interface NeuralNetworkLayer {
+  neurons: number;
+  activation: ActivationFunction;
+  dropout?: number;
+}
 
 export interface Model {
   id: string;
@@ -21,15 +40,18 @@ export interface Model {
   created: Date;
   datasetName: string;
   parameters?: Record<string, any>;
-  neuralNetworkArchitecture?: number[];
+  neuralNetworkArchitecture?: number[] | NeuralNetworkLayer[];
 }
 
 interface ModelContextType {
   models: Model[];
   addModel: (model: Omit<Model, "id" | "created">) => void;
   deleteModel: (id: string) => void;
+  updateModel: (id: string, updates: Partial<Omit<Model, "id" | "created">>) => void;
   getModelById: (id: string) => Model | undefined;
   getBestModel: (datasetName: string) => Model | undefined;
+  getBestModelByType: (datasetName: string, type: ModelType) => Model | undefined;
+  getModelsByDataset: (datasetName: string) => Model[];
 }
 
 const ModelContext = createContext<ModelContextType | undefined>(undefined);
@@ -41,7 +63,19 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({
     // Load models from localStorage if available
     if (typeof window !== "undefined") {
       const storedModels = window.localStorage.getItem("ml-dl-models");
-      return storedModels ? JSON.parse(storedModels) : [];
+      if (storedModels) {
+        try {
+          // Parse dates from string format back to Date objects
+          const parsedModels = JSON.parse(storedModels);
+          return parsedModels.map((model: any) => ({
+            ...model,
+            created: new Date(model.created)
+          }));
+        } catch (e) {
+          console.error("Error parsing stored models:", e);
+          return [];
+        }
+      }
     }
     return [];
   });
@@ -64,6 +98,14 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({
     setModels((prevModels) => prevModels.filter((model) => model.id !== id));
   };
 
+  const updateModel = (id: string, updates: Partial<Omit<Model, "id" | "created">>) => {
+    setModels((prevModels) => 
+      prevModels.map((model) => 
+        model.id === id ? { ...model, ...updates } : model
+      )
+    );
+  };
+
   const getModelById = (id: string) => {
     return models.find((model) => model.id === id);
   };
@@ -81,14 +123,34 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({
     );
   };
 
+  const getBestModelByType = (datasetName: string, type: ModelType) => {
+    const modelsForDataset = models.filter(
+      (model) => model.datasetName === datasetName && model.type === type
+    );
+    
+    if (modelsForDataset.length === 0) return undefined;
+    
+    return modelsForDataset.reduce((best, current) => 
+      current.accuracy > best.accuracy ? current : best, 
+      modelsForDataset[0]
+    );
+  };
+
+  const getModelsByDataset = (datasetName: string) => {
+    return models.filter((model) => model.datasetName === datasetName);
+  };
+
   return (
     <ModelContext.Provider
       value={{
         models,
         addModel,
         deleteModel,
+        updateModel,
         getModelById,
         getBestModel,
+        getBestModelByType,
+        getModelsByDataset,
       }}
     >
       {children}
@@ -103,3 +165,4 @@ export const useModels = (): ModelContextType => {
   }
   return context;
 };
+

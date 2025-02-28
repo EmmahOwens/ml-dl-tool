@@ -75,6 +75,18 @@ export const trainMLModel = (
         case "KNN":
           baseAccuracy = 0.76 + Math.random() * 0.14;
           break;
+        case "Gradient Boosting":
+          baseAccuracy = 0.87 + Math.random() * 0.08;
+          break;
+        case "AdaBoost":
+          baseAccuracy = 0.83 + Math.random() * 0.09;
+          break;
+        case "Naive Bayes":
+          baseAccuracy = 0.77 + Math.random() * 0.13;
+          break;
+        case "XGBoost":
+          baseAccuracy = 0.88 + Math.random() * 0.07;
+          break;
         default:
           baseAccuracy = 0.70 + Math.random() * 0.20;
       }
@@ -122,6 +134,22 @@ export const trainAllMLModels = async (
       algorithm: "KNN", 
       config: { name: "KNN", params: { nNeighbors: 5 } }
     },
+    { 
+      algorithm: "Gradient Boosting", 
+      config: { name: "Gradient Boosting", params: { learningRate: 0.1, nEstimators: 100 } }
+    },
+    { 
+      algorithm: "Naive Bayes", 
+      config: { name: "Naive Bayes", params: { alpha: 1.0 } }
+    },
+    { 
+      algorithm: "AdaBoost", 
+      config: { name: "AdaBoost", params: { learningRate: 1.0, nEstimators: 50 } }
+    },
+    { 
+      algorithm: "XGBoost", 
+      config: { name: "XGBoost", params: { learningRate: 0.1, maxDepth: 6, nEstimators: 100 } }
+    }
   ];
   
   // Train all models in parallel
@@ -140,3 +168,18 @@ export const getBestMLModel = (results: TrainingResult[]): TrainingResult => {
     current.accuracy > best.accuracy ? current : best
   );
 };
+
+// Helper function to analyze which features are most important
+export const analyzeFeatureImportance = (
+  data: any[],
+  features: string[],
+  target: string
+): { feature: string, importance: number }[] => {
+  // In a real implementation, this would actually calculate feature importance
+  // Here we simulate it with random values
+  return features.map(feature => ({
+    feature,
+    importance: Math.random()
+  })).sort((a, b) => b.importance - a.importance);
+};
+
