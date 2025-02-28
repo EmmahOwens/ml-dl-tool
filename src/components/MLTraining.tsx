@@ -36,17 +36,20 @@ export function MLTraining({
   const { theme } = useTheme();
   const { addModel } = useModels();
   const [isTraining, setIsTraining] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [progress, setProgress] = useState(0);
   const [results, setResults] = useState<TrainingResult[]>([]);
   const [bestModel, setBestModel] = useState<TrainingResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const handleStartTraining = async () => {
-    if (isTraining) return;
+    if (isTraining || isSaving) return;
     
     setIsTraining(true);
     setProgress(0);
     setResults([]);
     setBestModel(null);
+    setError(null);
     
     try {
       // Simulate progress updates
@@ -71,8 +74,12 @@ export function MLTraining({
       const best = getBestMLModel(results);
       setBestModel(best);
       
+      clearInterval(progressInterval);
+      setProgress(100);
+      
       // Add the best model to storage
-      addModel({
+      setIsSaving(true);
+      await addModel({
         name: `${best.algorithm} - ${datasetName}`,
         type: "ML",
         algorithm: best.algorithm,
@@ -81,18 +88,17 @@ export function MLTraining({
         parameters: best.parameters,
       });
       
-      clearInterval(progressInterval);
-      setProgress(100);
-      
       toast.success(`Training complete! Best model: ${best.algorithm} (${(best.accuracy * 100).toFixed(2)}%)`);
       
       // Notify parent component
       onTrainingComplete();
     } catch (error) {
       console.error("Training error:", error);
+      setError(error instanceof Error ? error.message : "An unknown error occurred");
       toast.error("An error occurred during training");
     } finally {
       setIsTraining(false);
+      setIsSaving(false);
     }
   };
 
@@ -144,15 +150,55 @@ export function MLTraining({
         </div>
       </div>
       
-      {!isTraining && results.length === 0 && (
+      {error && (
+        <div className={`
+          p-4 rounded-lg border mb-6
+          ${theme === "light" 
+            ? "border-red-200 bg-red-50" 
+            : "border-red-900/30 bg-red-900/10"}
+        `}>
+          <div className="flex items-start gap-2">
+            <AlertCircle className={`
+              h-5 w-5 mt-0.5
+              ${theme === "light" 
+                ? "text-red-600" 
+                : "text-red-400"}
+            `} />
+            <div>
+              <p className={`
+                ${theme === "light" 
+                  ? "text-red-700" 
+                  : "text-red-500"}
+              `}>
+                {error}
+              </p>
+              <button
+                onClick={() => setError(null)}
+                className={`
+                  mt-2 px-3 py-1 text-sm rounded
+                  ${theme === "light" 
+                    ? "bg-red-100 text-red-800 hover:bg-red-200" 
+                    : "bg-red-900/20 text-red-400 hover:bg-red-900/30"}
+                `}
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {!isTraining && !isSaving && results.length === 0 && (
         <div className="flex justify-center mb-6">
           <button
             onClick={handleStartTraining}
+            disabled={isTraining || isSaving}
             className={`
               button-primary
               ${theme === "light" 
                 ? "button-primary-light" 
                 : "button-primary-dark"}
+              ${(isTraining || isSaving) ? "opacity-50 cursor-not-allowed" : ""}
             `}
           >
             Start ML Training
@@ -160,17 +206,19 @@ export function MLTraining({
         </div>
       )}
       
-      {(isTraining || results.length > 0) && (
+      {(isTraining || isSaving || results.length > 0) && (
         <div className="space-y-6">
-          {isTraining && (
+          {(isTraining || isSaving) && (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Timer className="h-5 w-5 text-primary animate-pulse" />
-                  <span className="font-medium">Training in progress...</span>
+                  <span className="font-medium">
+                    {isSaving ? "Saving model..." : "Training in progress..."}
+                  </span>
                 </div>
                 <span className="text-sm text-muted-foreground">
-                  {progress.toFixed(0)}%
+                  {isSaving ? "100%" : progress.toFixed(0) + "%"}
                 </span>
               </div>
               
@@ -182,17 +230,19 @@ export function MLTraining({
               `}>
                 <div 
                   className="h-full bg-primary transition-all duration-300"
-                  style={{ width: `${progress}%` }}
+                  style={{ width: `${isSaving ? 100 : progress}%` }}
                 />
               </div>
               
               <p className="text-sm text-muted-foreground">
-                Training 6 different ML models to find the best one
+                {isSaving 
+                  ? "Saving best model to database..." 
+                  : "Training 6 different ML models to find the best one"}
               </p>
             </div>
           )}
           
-          {results.length > 0 && (
+          {results.length > 0 && !isTraining && !isSaving && (
             <div className="space-y-4 animate-fade-in">
               <div className="flex items-center gap-2 mb-3">
                 <BarChart3 className="h-5 w-5 text-primary" />
@@ -298,7 +348,7 @@ export function MLTraining({
                       <div className="mt-3 flex items-center gap-2">
                         <AlertCircle className="h-4 w-4 text-muted-foreground" />
                         <p className="text-xs text-muted-foreground">
-                          This model has been saved and can be accessed from the Model Storage
+                          This model has been saved to the database and can be accessed from the Model Storage
                         </p>
                       </div>
                     </div>

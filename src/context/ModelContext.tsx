@@ -1,5 +1,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 export type Algorithm = 
   | "Linear Regression" 
@@ -45,13 +47,16 @@ export interface Model {
 
 interface ModelContextType {
   models: Model[];
-  addModel: (model: Omit<Model, "id" | "created">) => void;
-  deleteModel: (id: string) => void;
-  updateModel: (id: string, updates: Partial<Omit<Model, "id" | "created">>) => void;
+  isLoading: boolean;
+  error: Error | null;
+  addModel: (model: Omit<Model, "id" | "created">) => Promise<void>;
+  deleteModel: (id: string) => Promise<void>;
+  updateModel: (id: string, updates: Partial<Omit<Model, "id" | "created">>) => Promise<void>;
   getModelById: (id: string) => Model | undefined;
   getBestModel: (datasetName: string) => Model | undefined;
   getBestModelByType: (datasetName: string, type: ModelType) => Model | undefined;
   getModelsByDataset: (datasetName: string) => Model[];
+  refreshModels: () => Promise<void>;
 }
 
 const ModelContext = createContext<ModelContextType | undefined>(undefined);
@@ -59,60 +64,187 @@ const ModelContext = createContext<ModelContextType | undefined>(undefined);
 export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({ 
   children 
 }) => {
-  const [models, setModels] = useState<Model[]>(() => {
-    // Load models from localStorage if available
-    if (typeof window !== "undefined") {
-      const storedModels = window.localStorage.getItem("ml-dl-models");
-      if (storedModels) {
-        try {
-          // Parse dates from string format back to Date objects
-          const parsedModels = JSON.parse(storedModels);
-          return parsedModels.map((model: any) => ({
-            ...model,
-            created: new Date(model.created)
-          }));
-        } catch (e) {
-          console.error("Error parsing stored models:", e);
-          return [];
-        }
-      }
+  const [models, setModels] = useState<Model[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+
+  // Function to fetch models from Supabase
+  const fetchModels = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      const { data, error } = await supabase
+        .from('models')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      
+      // Transform data from Supabase format to our Model format
+      const transformedModels = data.map(item => ({
+        id: item.id,
+        name: item.name,
+        type: item.type as ModelType,
+        algorithm: item.algorithm as Algorithm,
+        accuracy: Number(item.accuracy),
+        created: new Date(item.created_at),
+        datasetName: item.dataset_name,
+        parameters: item.parameters,
+        neuralNetworkArchitecture: item.neural_network_architecture,
+      }));
+      
+      setModels(transformedModels);
+    } catch (err) {
+      console.error("Error fetching models:", err);
+      setError(err instanceof Error ? err : new Error(String(err)));
+      toast.error("Failed to load models");
+    } finally {
+      setIsLoading(false);
     }
-    return [];
-  });
+  };
 
-  // Save models to localStorage when they change
+  // Initial load
   useEffect(() => {
-    window.localStorage.setItem("ml-dl-models", JSON.stringify(models));
-  }, [models]);
+    fetchModels();
+  }, []);
 
-  const addModel = (modelData: Omit<Model, "id" | "created">) => {
-    const newModel: Model = {
-      ...modelData,
-      id: crypto.randomUUID(),
-      created: new Date(),
-    };
-    setModels((prevModels) => [...prevModels, newModel]);
+  const addModel = async (modelData: Omit<Model, "id" | "created">) => {
+    try {
+      setIsLoading(true);
+      
+      // Transform our model data to Supabase format
+      const supabaseData = {
+        name: modelData.name,
+        type: modelData.type,
+        algorithm: modelData.algorithm,
+        accuracy: modelData.accuracy,
+        dataset_name: modelData.datasetName,
+        parameters: modelData.parameters || {},
+        neural_network_architecture: modelData.neuralNetworkArchitecture || null,
+      };
+      
+      const { data, error } = await supabase
+        .from('models')
+        .insert(supabaseData)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      
+      // Transform the returned data to our Model format
+      const newModel: Model = {
+        id: data.id,
+        name: data.name,
+        type: data.type as ModelType,
+        algorithm: data.algorithm as Algorithm,
+        accuracy: Number(data.accuracy),
+        created: new Date(data.created_at),
+        datasetName: data.dataset_name,
+        parameters: data.parameters,
+        neuralNetworkArchitecture: data.neural_network_architecture,
+      };
+      
+      setModels(prevModels => [newModel, ...prevModels]);
+      
+    } catch (err) {
+      console.error("Error adding model:", err);
+      setError(err instanceof Error ? err : new Error(String(err)));
+      toast.error("Failed to save model");
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const deleteModel = (id: string) => {
-    setModels((prevModels) => prevModels.filter((model) => model.id !== id));
+  const deleteModel = async (id: string) => {
+    try {
+      setIsLoading(true);
+      
+      const { error } = await supabase
+        .from('models')
+        .delete()
+        .eq('id', id);
+      
+      if (error) throw error;
+      
+      setModels(prevModels => prevModels.filter(model => model.id !== id));
+      
+    } catch (err) {
+      console.error("Error deleting model:", err);
+      setError(err instanceof Error ? err : new Error(String(err)));
+      toast.error("Failed to delete model");
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const updateModel = (id: string, updates: Partial<Omit<Model, "id" | "created">>) => {
-    setModels((prevModels) => 
-      prevModels.map((model) => 
-        model.id === id ? { ...model, ...updates } : model
-      )
-    );
+  const updateModel = async (id: string, updates: Partial<Omit<Model, "id" | "created">>) => {
+    try {
+      setIsLoading(true);
+      
+      // Transform our updates to Supabase format
+      const supabaseUpdates: Record<string, any> = {};
+      
+      if (updates.name) supabaseUpdates.name = updates.name;
+      if (updates.type) supabaseUpdates.type = updates.type;
+      if (updates.algorithm) supabaseUpdates.algorithm = updates.algorithm;
+      if (updates.accuracy !== undefined) supabaseUpdates.accuracy = updates.accuracy;
+      if (updates.datasetName) supabaseUpdates.dataset_name = updates.datasetName;
+      if (updates.parameters) supabaseUpdates.parameters = updates.parameters;
+      if (updates.neuralNetworkArchitecture !== undefined) 
+        supabaseUpdates.neural_network_architecture = updates.neuralNetworkArchitecture;
+      
+      const { data, error } = await supabase
+        .from('models')
+        .update(supabaseUpdates)
+        .eq('id', id)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      
+      // Transform the returned data
+      const updatedModel: Model = {
+        id: data.id,
+        name: data.name,
+        type: data.type as ModelType,
+        algorithm: data.algorithm as Algorithm,
+        accuracy: Number(data.accuracy),
+        created: new Date(data.created_at),
+        datasetName: data.dataset_name,
+        parameters: data.parameters,
+        neuralNetworkArchitecture: data.neural_network_architecture,
+      };
+      
+      setModels(prevModels => 
+        prevModels.map(model => 
+          model.id === id ? updatedModel : model
+        )
+      );
+      
+    } catch (err) {
+      console.error("Error updating model:", err);
+      setError(err instanceof Error ? err : new Error(String(err)));
+      toast.error("Failed to update model");
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const refreshModels = async () => {
+    await fetchModels();
   };
 
   const getModelById = (id: string) => {
-    return models.find((model) => model.id === id);
+    return models.find(model => model.id === id);
   };
 
   const getBestModel = (datasetName: string) => {
     const modelsForDataset = models.filter(
-      (model) => model.datasetName === datasetName
+      model => model.datasetName === datasetName
     );
     
     if (modelsForDataset.length === 0) return undefined;
@@ -125,7 +257,7 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const getBestModelByType = (datasetName: string, type: ModelType) => {
     const modelsForDataset = models.filter(
-      (model) => model.datasetName === datasetName && model.type === type
+      model => model.datasetName === datasetName && model.type === type
     );
     
     if (modelsForDataset.length === 0) return undefined;
@@ -137,13 +269,15 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({
   };
 
   const getModelsByDataset = (datasetName: string) => {
-    return models.filter((model) => model.datasetName === datasetName);
+    return models.filter(model => model.datasetName === datasetName);
   };
 
   return (
     <ModelContext.Provider
       value={{
         models,
+        isLoading,
+        error,
         addModel,
         deleteModel,
         updateModel,
@@ -151,6 +285,7 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({
         getBestModel,
         getBestModelByType,
         getModelsByDataset,
+        refreshModels,
       }}
     >
       {children}
@@ -165,4 +300,3 @@ export const useModels = (): ModelContextType => {
   }
   return context;
 };
-

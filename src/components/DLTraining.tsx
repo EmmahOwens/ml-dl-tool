@@ -32,6 +32,7 @@ export function DLTraining({
   const { theme } = useTheme();
   const { addModel } = useModels();
   const [isTraining, setIsTraining] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [progress, setProgress] = useState(0);
   const [currentArchitecture, setCurrentArchitecture] = useState<number[]>([]);
   const [bestModel, setBestModel] = useState<{
@@ -39,13 +40,15 @@ export function DLTraining({
     architecture: number[] | NeuralNetworkLayer[];
     parameters: Record<string, any>;
   } | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const handleStartTraining = async () => {
-    if (isTraining) return;
+    if (isTraining || isSaving) return;
     
     setIsTraining(true);
     setProgress(0);
     setBestModel(null);
+    setError(null);
     
     try {
       // Simulate progress and architecture optimization
@@ -92,8 +95,11 @@ export function DLTraining({
         parameters: result.parameters
       });
       
+      setProgress(100);
+      
       // Add the model to storage
-      addModel({
+      setIsSaving(true);
+      await addModel({
         name: `Neural Network - ${datasetName}`,
         type: "DL",
         algorithm: "Neural Network",
@@ -103,17 +109,17 @@ export function DLTraining({
         neuralNetworkArchitecture: result.neuralNetworkArchitecture
       });
       
-      setProgress(100);
-      
       toast.success(`Training complete! Optimized network accuracy: ${(result.accuracy * 100).toFixed(2)}%`);
       
       // Notify parent component
       onTrainingComplete();
     } catch (error) {
       console.error("Training error:", error);
+      setError(error instanceof Error ? error.message : "An unknown error occurred");
       toast.error("An error occurred during training");
     } finally {
       setIsTraining(false);
+      setIsSaving(false);
     }
   };
 
@@ -197,15 +203,55 @@ export function DLTraining({
         </div>
       </div>
       
-      {!isTraining && !bestModel && (
+      {error && (
+        <div className={`
+          p-4 rounded-lg border mb-6
+          ${theme === "light" 
+            ? "border-red-200 bg-red-50" 
+            : "border-red-900/30 bg-red-900/10"}
+        `}>
+          <div className="flex items-start gap-2">
+            <AlertCircle className={`
+              h-5 w-5 mt-0.5
+              ${theme === "light" 
+                ? "text-red-600" 
+                : "text-red-400"}
+            `} />
+            <div>
+              <p className={`
+                ${theme === "light" 
+                  ? "text-red-700" 
+                  : "text-red-500"}
+              `}>
+                {error}
+              </p>
+              <button
+                onClick={() => setError(null)}
+                className={`
+                  mt-2 px-3 py-1 text-sm rounded
+                  ${theme === "light" 
+                    ? "bg-red-100 text-red-800 hover:bg-red-200" 
+                    : "bg-red-900/20 text-red-400 hover:bg-red-900/30"}
+                `}
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {!isTraining && !isSaving && !bestModel && (
         <div className="flex justify-center mb-6">
           <button
             onClick={handleStartTraining}
+            disabled={isTraining || isSaving}
             className={`
               button-primary
               ${theme === "light" 
                 ? "button-primary-light" 
                 : "button-primary-dark"}
+              ${(isTraining || isSaving) ? "opacity-50 cursor-not-allowed" : ""}
             `}
           >
             Start DL Training
@@ -213,17 +259,19 @@ export function DLTraining({
         </div>
       )}
       
-      {(isTraining || bestModel) && (
+      {(isTraining || isSaving || bestModel) && (
         <div className="space-y-6">
-          {isTraining && (
+          {(isTraining || isSaving) && (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Timer className="h-5 w-5 text-primary animate-pulse" />
-                  <span className="font-medium">Optimizing neural network...</span>
+                  <span className="font-medium">
+                    {isSaving ? "Saving model..." : "Optimizing neural network..."}
+                  </span>
                 </div>
                 <span className="text-sm text-muted-foreground">
-                  {progress.toFixed(0)}%
+                  {isSaving ? "100%" : progress.toFixed(0) + "%"}
                 </span>
               </div>
               
@@ -235,11 +283,11 @@ export function DLTraining({
               `}>
                 <div 
                   className="h-full bg-primary transition-all duration-300"
-                  style={{ width: `${progress}%` }}
+                  style={{ width: `${isSaving ? 100 : progress}%` }}
                 />
               </div>
               
-              {currentArchitecture.length > 0 && (
+              {currentArchitecture.length > 0 && !isSaving && (
                 <div className="mt-4">
                   <p className="text-sm text-muted-foreground mb-2">
                     Testing architecture:
@@ -283,10 +331,16 @@ export function DLTraining({
                   </div>
                 </div>
               )}
+              
+              {isSaving && (
+                <p className="text-sm text-muted-foreground">
+                  Saving optimized model to database...
+                </p>
+              )}
             </div>
           )}
           
-          {bestModel && (
+          {bestModel && !isTraining && !isSaving && (
             <div className="space-y-4 animate-fade-in">
               <div className="flex items-center gap-2 mb-3">
                 <Brain className="h-5 w-5 text-primary" />
@@ -342,7 +396,7 @@ export function DLTraining({
                   <div className="flex items-center gap-2">
                     <AlertCircle className="h-4 w-4 text-muted-foreground" />
                     <p className="text-xs text-muted-foreground">
-                      This model has been saved and can be accessed from the Model Storage
+                      This model has been saved to the database and can be accessed from the Model Storage
                     </p>
                   </div>
                 </div>

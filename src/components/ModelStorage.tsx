@@ -8,16 +8,20 @@ import {
   Trash2,
   Filter,
   Brain,
-  Search
+  Search,
+  RefreshCw,
+  AlertCircle,
+  Loader2
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
 export function ModelStorage() {
   const { theme } = useTheme();
-  const { models, deleteModel } = useModels();
+  const { models, isLoading, error, deleteModel, refreshModels } = useModels();
   const [searchTerm, setSearchTerm] = useState("");
   const [typeFilter, setTypeFilter] = useState<"all" | "ML" | "DL">("all");
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Filter models based on search term and type filter
   const filteredModels = models.filter(model => {
@@ -35,9 +39,27 @@ export function ModelStorage() {
     return new Date(b.created).getTime() - new Date(a.created).getTime();
   });
 
-  const handleDeleteModel = (id: string, name: string) => {
-    deleteModel(id);
-    toast.success(`Model "${name}" deleted`);
+  const handleDeleteModel = async (id: string, name: string) => {
+    try {
+      await deleteModel(id);
+      toast.success(`Model "${name}" deleted`);
+    } catch (error) {
+      // Error is already handled in the context and a toast is shown
+      console.error("Delete model failed:", error);
+    }
+  };
+
+  const handleRefresh = async () => {
+    try {
+      setIsRefreshing(true);
+      await refreshModels();
+      toast.success("Models refreshed");
+    } catch (error) {
+      console.error("Refresh failed:", error);
+      toast.error("Failed to refresh models");
+    } finally {
+      setIsRefreshing(false);
+    }
   };
 
   const formatDate = (date: Date) => {
@@ -56,8 +78,28 @@ export function ModelStorage() {
           <h2 className="text-2xl font-semibold">Model Storage</h2>
         </div>
         
-        <div className="text-sm text-muted-foreground">
-          {models.length} model{models.length !== 1 ? "s" : ""} saved
+        <div className="flex items-center gap-4">
+          <button 
+            onClick={handleRefresh}
+            disabled={isLoading || isRefreshing}
+            className={`
+              p-2 rounded-full
+              ${theme === "light" 
+                ? "hover:bg-secondary text-muted-foreground hover:text-foreground" 
+                : "hover:bg-secondary/60 text-muted-foreground hover:text-foreground"}
+              ${(isLoading || isRefreshing) ? "opacity-50 cursor-not-allowed" : ""}
+            `}
+            aria-label="Refresh models"
+          >
+            {isRefreshing ? (
+              <Loader2 className="h-5 w-5 animate-spin" />
+            ) : (
+              <RefreshCw className="h-5 w-5" />
+            )}
+          </button>
+          <div className="text-sm text-muted-foreground">
+            {models.length} model{models.length !== 1 ? "s" : ""} saved
+          </div>
         </div>
       </div>
       
@@ -130,7 +172,66 @@ export function ModelStorage() {
         </div>
       </div>
       
-      {sortedModels.length === 0 ? (
+      {isLoading && !isRefreshing && (
+        <div className={`
+          p-8 rounded-lg text-center
+          ${theme === "light" 
+            ? "bg-secondary/50" 
+            : "bg-secondary/30"}
+        `}>
+          <Loader2 className="h-8 w-8 mx-auto mb-4 text-primary animate-spin" />
+          <p className="text-muted-foreground">Loading models...</p>
+        </div>
+      )}
+      
+      {error && (
+        <div className={`
+          p-6 rounded-lg border
+          ${theme === "light" 
+            ? "border-red-200 bg-red-50" 
+            : "border-red-900/30 bg-red-900/10"}
+        `}>
+          <div className="flex items-start gap-3">
+            <AlertCircle className={`
+              h-5 w-5 mt-0.5
+              ${theme === "light" 
+                ? "text-red-600" 
+                : "text-red-400"}
+            `} />
+            <div>
+              <h4 className={`
+                font-medium
+                ${theme === "light" 
+                  ? "text-red-800" 
+                  : "text-red-400"}
+              `}>
+                Error loading models
+              </h4>
+              <p className={`
+                text-sm mt-1
+                ${theme === "light" 
+                  ? "text-red-700" 
+                  : "text-red-500"}
+              `}>
+                {error.message || "Something went wrong. Please try refreshing."}
+              </p>
+              <button
+                onClick={handleRefresh}
+                className={`
+                  mt-3 px-3 py-1 text-sm rounded
+                  ${theme === "light" 
+                    ? "bg-red-100 text-red-800 hover:bg-red-200" 
+                    : "bg-red-900/20 text-red-400 hover:bg-red-900/30"}
+                `}
+              >
+                Try again
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {!isLoading && !error && sortedModels.length === 0 && (
         <div className={`
           p-6 rounded-lg text-center
           ${theme === "light" 
@@ -148,7 +249,9 @@ export function ModelStorage() {
             </p>
           )}
         </div>
-      ) : (
+      )}
+      
+      {!isLoading && !error && sortedModels.length > 0 && (
         <div className="grid gap-4 md:grid-cols-2">
           {sortedModels.map((model) => (
             <div
@@ -232,7 +335,12 @@ export function ModelStorage() {
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Architecture:</span>
                     <span className="font-medium">
-                      {model.neuralNetworkArchitecture.join(" → ")}
+                      {Array.isArray(model.neuralNetworkArchitecture) && 
+                       typeof model.neuralNetworkArchitecture[0] === 'number'
+                        ? (model.neuralNetworkArchitecture as number[]).join(" → ")
+                        : (model.neuralNetworkArchitecture as any[]).map(layer => 
+                            typeof layer === 'number' ? layer : layer.neurons
+                          ).join(" → ")}
                     </span>
                   </div>
                 )}
