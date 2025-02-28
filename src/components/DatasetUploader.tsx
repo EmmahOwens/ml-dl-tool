@@ -3,6 +3,7 @@ import { useTheme } from "@/context/ThemeContext";
 import { Upload, FileType, X, Check, AlertCircle } from "lucide-react";
 import { useState, useRef, DragEvent, ChangeEvent } from "react";
 import { toast } from "sonner";
+import * as XLSX from 'xlsx';
 
 interface DatasetUploaderProps {
   onDatasetLoad: (
@@ -47,17 +48,53 @@ export function DatasetUploader({ onDatasetLoad }: DatasetUploaderProps) {
     }
   };
 
+  const isValidFileType = (file: File) => {
+    const validTypes = [
+      'text/csv', 
+      'application/json',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/vnd.ms-excel'
+    ];
+    const fileName = file.name.toLowerCase();
+    
+    return validTypes.includes(file.type) || 
+           fileName.endsWith('.csv') || 
+           fileName.endsWith('.json') || 
+           fileName.endsWith('.xlsx') || 
+           fileName.endsWith('.xls');
+  };
+
+  const getFileExtension = (fileName: string): string => {
+    return fileName.split('.').pop()?.toLowerCase() || '';
+  };
+
   const handleFile = (file: File) => {
-    if (file.type !== "text/csv" && !file.name.endsWith('.csv')) {
-      toast.error("Please upload a CSV file");
+    if (!isValidFileType(file)) {
+      toast.error("Please upload a CSV, Excel, or JSON file");
       return;
     }
 
     setFile(file);
     setIsProcessing(true);
 
-    // Read the CSV file
+    const fileExtension = getFileExtension(file.name);
+    
+    if (fileExtension === 'csv') {
+      processCSVFile(file);
+    } else if (fileExtension === 'json') {
+      processJSONFile(file);
+    } else if (['xlsx', 'xls'].includes(fileExtension)) {
+      processExcelFile(file);
+    } else {
+      toast.error("Unsupported file format");
+      setFile(null);
+      setIsProcessing(false);
+    }
+  };
+
+  const processCSVFile = (file: File) => {
     const reader = new FileReader();
+    
     reader.onload = (e) => {
       try {
         const csv = e.target?.result as string;
@@ -78,12 +115,101 @@ export function DatasetUploader({ onDatasetLoad }: DatasetUploaderProps) {
     reader.readAsText(file);
   };
 
+  const processJSONFile = (file: File) => {
+    const reader = new FileReader();
+    
+    reader.onload = (e) => {
+      try {
+        const jsonData = JSON.parse(e.target?.result as string);
+        
+        // Check if it's an array of objects
+        if (!Array.isArray(jsonData) || jsonData.length === 0) {
+          throw new Error("JSON file must contain an array of objects");
+        }
+        
+        // Extract headers from the first object
+        const headers = Object.keys(jsonData[0]);
+        
+        if (headers.length === 0) {
+          throw new Error("JSON file contains empty objects");
+        }
+        
+        setColumns(headers);
+        setTargetColumn(headers[headers.length - 1]); // Default to last column
+        setIsProcessing(false);
+      } catch (error) {
+        console.error("Error processing JSON:", error);
+        toast.error(error instanceof Error ? error.message : "Error processing the JSON file");
+        setFile(null);
+        setIsProcessing(false);
+      }
+    };
+
+    reader.readAsText(file);
+  };
+
+  const processExcelFile = (file: File) => {
+    const reader = new FileReader();
+    
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        
+        // Get the first worksheet
+        const worksheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[worksheetName];
+        
+        // Convert the worksheet to JSON
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+        
+        // First row contains headers
+        if (jsonData.length === 0 || !Array.isArray(jsonData[0])) {
+          throw new Error("Excel file has no data or invalid format");
+        }
+        
+        const headers = jsonData[0] as string[];
+        
+        if (headers.length === 0) {
+          throw new Error("Excel file has no columns");
+        }
+        
+        setColumns(headers);
+        setTargetColumn(headers[headers.length - 1]); // Default to last column
+        setIsProcessing(false);
+      } catch (error) {
+        console.error("Error processing Excel:", error);
+        toast.error(error instanceof Error ? error.message : "Error processing the Excel file");
+        setFile(null);
+        setIsProcessing(false);
+      }
+    };
+
+    reader.readAsArrayBuffer(file);
+  };
+
   const processDataset = () => {
     if (!file || !targetColumn) return;
     
     setIsProcessing(true);
     
+    const fileExtension = getFileExtension(file.name);
+    
+    if (fileExtension === 'csv') {
+      processCSVDataset(file);
+    } else if (fileExtension === 'json') {
+      processJSONDataset(file);
+    } else if (['xlsx', 'xls'].includes(fileExtension)) {
+      processExcelDataset(file);
+    } else {
+      toast.error("Unsupported file format");
+      setIsProcessing(false);
+    }
+  };
+
+  const processCSVDataset = (file: File) => {
     const reader = new FileReader();
+    
     reader.onload = (e) => {
       try {
         const csv = e.target?.result as string;
@@ -136,6 +262,114 @@ export function DatasetUploader({ onDatasetLoad }: DatasetUploaderProps) {
     reader.readAsText(file);
   };
 
+  const processJSONDataset = (file: File) => {
+    const reader = new FileReader();
+    
+    reader.onload = (e) => {
+      try {
+        const jsonData = JSON.parse(e.target?.result as string);
+        
+        if (!Array.isArray(jsonData) || jsonData.length === 0) {
+          throw new Error("JSON file must contain an array of objects");
+        }
+        
+        // Convert string values that look like numbers to actual numbers
+        const data = jsonData.map(row => {
+          const processedRow: Record<string, any> = {};
+          
+          for (const [key, value] of Object.entries(row)) {
+            if (typeof value === 'string') {
+              const numValue = parseFloat(value);
+              processedRow[key] = !isNaN(numValue) ? numValue : value;
+            } else {
+              processedRow[key] = value;
+            }
+          }
+          
+          return processedRow;
+        });
+        
+        // Get all possible columns
+        const headers = Object.keys(data[0]);
+        
+        if (!headers.includes(targetColumn)) {
+          throw new Error("Target column not found in JSON data");
+        }
+        
+        // All columns except target are features
+        const features = headers.filter(h => h !== targetColumn);
+        
+        onDatasetLoad(data, features, targetColumn, file.name);
+        toast.success("Dataset loaded successfully");
+        setIsProcessing(false);
+      } catch (error) {
+        console.error("Error processing JSON dataset:", error);
+        toast.error(error instanceof Error ? error.message : "Error processing the dataset");
+        setIsProcessing(false);
+      }
+    };
+    
+    reader.readAsText(file);
+  };
+
+  const processExcelDataset = (file: File) => {
+    const reader = new FileReader();
+    
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        
+        // Get the first worksheet
+        const worksheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[worksheetName];
+        
+        // Convert to JSON with headers
+        const jsonData = XLSX.utils.sheet_to_json(worksheet);
+        
+        if (jsonData.length === 0) {
+          throw new Error("Excel file has no data");
+        }
+        
+        // Check if target column exists
+        const headers = Object.keys(jsonData[0]);
+        
+        if (!headers.includes(targetColumn)) {
+          throw new Error("Target column not found in Excel data");
+        }
+        
+        // Convert string values that look like numbers to actual numbers
+        const processedData = jsonData.map(row => {
+          const processedRow: Record<string, any> = {};
+          
+          for (const [key, value] of Object.entries(row)) {
+            if (typeof value === 'string') {
+              const numValue = parseFloat(value as string);
+              processedRow[key] = !isNaN(numValue) ? numValue : value;
+            } else {
+              processedRow[key] = value;
+            }
+          }
+          
+          return processedRow;
+        });
+        
+        // All columns except target are features
+        const features = headers.filter(h => h !== targetColumn);
+        
+        onDatasetLoad(processedData, features, targetColumn, file.name);
+        toast.success("Dataset loaded successfully");
+        setIsProcessing(false);
+      } catch (error) {
+        console.error("Error processing Excel dataset:", error);
+        toast.error(error instanceof Error ? error.message : "Error processing the dataset");
+        setIsProcessing(false);
+      }
+    };
+    
+    reader.readAsArrayBuffer(file);
+  };
+
   return (
     <div className={`
       card-container
@@ -169,7 +403,7 @@ export function DatasetUploader({ onDatasetLoad }: DatasetUploaderProps) {
               </div>
               <div className="text-center">
                 <p className="text-lg font-medium">
-                  Drag and drop your CSV file here
+                  Drag and drop your dataset file here
                 </p>
                 <p className="text-sm text-muted-foreground mt-1">
                   Or click to browse
@@ -177,7 +411,7 @@ export function DatasetUploader({ onDatasetLoad }: DatasetUploaderProps) {
               </div>
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <FileType className="h-4 w-4" />
-                <span>Accepted format: CSV</span>
+                <span>Accepted formats: CSV, Excel (.xlsx, .xls), JSON</span>
               </div>
             </div>
           </div>
@@ -186,7 +420,7 @@ export function DatasetUploader({ onDatasetLoad }: DatasetUploaderProps) {
             type="file"
             ref={fileInputRef}
             onChange={handleFileChange}
-            accept=".csv"
+            accept=".csv,.json,.xlsx,.xls"
             className="hidden"
           />
         </>

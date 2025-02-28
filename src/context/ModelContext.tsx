@@ -82,7 +82,7 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({
       if (error) throw error;
       
       // Transform data from Supabase format to our Model format
-      const transformedModels = data.map(item => ({
+      const transformedModels: Model[] = data.map(item => ({
         id: item.id,
         name: item.name,
         type: item.type as ModelType,
@@ -90,8 +90,12 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({
         accuracy: Number(item.accuracy),
         created: new Date(item.created_at),
         datasetName: item.dataset_name,
-        parameters: item.parameters,
-        neuralNetworkArchitecture: item.neural_network_architecture,
+        parameters: item.parameters ? (typeof item.parameters === 'string' ? JSON.parse(item.parameters) : item.parameters) : {},
+        neuralNetworkArchitecture: item.neural_network_architecture ? 
+          (typeof item.neural_network_architecture === 'string' ? 
+            JSON.parse(item.neural_network_architecture) : 
+            item.neural_network_architecture) : 
+          undefined,
       }));
       
       setModels(transformedModels);
@@ -141,8 +145,12 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({
         accuracy: Number(data.accuracy),
         created: new Date(data.created_at),
         datasetName: data.dataset_name,
-        parameters: data.parameters,
-        neuralNetworkArchitecture: data.neural_network_architecture,
+        parameters: data.parameters ? (typeof data.parameters === 'string' ? JSON.parse(data.parameters) : data.parameters) : {},
+        neuralNetworkArchitecture: data.neural_network_architecture ? 
+          (typeof data.neural_network_architecture === 'string' ? 
+            JSON.parse(data.neural_network_architecture) : 
+            data.neural_network_architecture) : 
+          undefined,
       };
       
       setModels(prevModels => [newModel, ...prevModels]);
@@ -214,8 +222,12 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({
         accuracy: Number(data.accuracy),
         created: new Date(data.created_at),
         datasetName: data.dataset_name,
-        parameters: data.parameters,
-        neuralNetworkArchitecture: data.neural_network_architecture,
+        parameters: data.parameters ? (typeof data.parameters === 'string' ? JSON.parse(data.parameters) : data.parameters) : {},
+        neuralNetworkArchitecture: data.neural_network_architecture ? 
+          (typeof data.neural_network_architecture === 'string' ? 
+            JSON.parse(data.neural_network_architecture) : 
+            data.neural_network_architecture) : 
+          undefined,
       };
       
       setModels(prevModels => 
