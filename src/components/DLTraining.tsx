@@ -1,7 +1,7 @@
 
 import { useTheme } from "@/context/ThemeContext";
 import { useState } from "react";
-import { useModels } from "@/context/ModelContext";
+import { useModels, NeuralNetworkLayer } from "@/context/ModelContext";
 import { optimizeNeuralNetwork } from "@/utils/dlNetworks";
 import { toast } from "sonner";
 import { 
@@ -36,7 +36,7 @@ export function DLTraining({
   const [currentArchitecture, setCurrentArchitecture] = useState<number[]>([]);
   const [bestModel, setBestModel] = useState<{
     accuracy: number;
-    architecture: number[];
+    architecture: number[] | NeuralNetworkLayer[];
     parameters: Record<string, any>;
   } | null>(null);
 
@@ -114,6 +114,43 @@ export function DLTraining({
       toast.error("An error occurred during training");
     } finally {
       setIsTraining(false);
+    }
+  };
+
+  // Helper function to render architecture nodes
+  const renderArchitectureNodes = (architecture: number[] | NeuralNetworkLayer[]) => {
+    if (architecture.length === 0) return null;
+    
+    if (typeof architecture[0] === 'number') {
+      // Handle number[] type
+      return (architecture as number[]).map((neurons, index) => (
+        <div key={index} className="flex items-center">
+          <div className="h-px w-3 bg-border" />
+          <div className={`
+            px-3 py-1 text-xs rounded-full
+            ${theme === "light" 
+              ? "bg-primary/10 text-primary" 
+              : "bg-primary/20 text-primary-foreground"}
+          `}>
+            Hidden ({neurons})
+          </div>
+        </div>
+      ));
+    } else {
+      // Handle NeuralNetworkLayer[] type
+      return (architecture as NeuralNetworkLayer[]).map((layer, index) => (
+        <div key={index} className="flex items-center">
+          <div className="h-px w-3 bg-border" />
+          <div className={`
+            px-3 py-1 text-xs rounded-full
+            ${theme === "light" 
+              ? "bg-primary/10 text-primary" 
+              : "bg-primary/20 text-primary-foreground"}
+          `}>
+            Hidden ({layer.neurons})
+          </div>
+        </div>
+      ));
     }
   };
 
@@ -285,19 +322,7 @@ export function DLTraining({
                       Input ({features.length})
                     </div>
                     
-                    {bestModel.architecture.map((neurons, index) => (
-                      <div key={index} className="flex items-center">
-                        <div className="h-px w-3 bg-border" />
-                        <div className={`
-                          px-3 py-1 text-xs rounded-full
-                          ${theme === "light" 
-                            ? "bg-primary/10 text-primary" 
-                            : "bg-primary/20 text-primary-foreground"}
-                        `}>
-                          Hidden ({neurons})
-                        </div>
-                      </div>
-                    ))}
+                    {renderArchitectureNodes(bestModel.architecture)}
                     
                     <div className="flex items-center">
                       <div className="h-px w-3 bg-border" />
