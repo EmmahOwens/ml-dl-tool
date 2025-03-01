@@ -2,6 +2,7 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import type { Json } from "@/integrations/supabase/types";
 
 export type Algorithm = 
   | "Linear Regression" 
@@ -125,15 +126,15 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({
     try {
       setIsLoading(true);
       
-      // Transform our model data to Supabase format
+      // Transform our model data to Supabase format and ensure proper JSON types
       const supabaseData = {
         name: modelData.name,
         type: modelData.type,
         algorithm: modelData.algorithm,
         accuracy: modelData.accuracy,
         dataset_name: modelData.datasetName,
-        parameters: modelData.parameters || {},
-        neural_network_architecture: modelData.neuralNetworkArchitecture || null,
+        parameters: modelData.parameters as Json || {},
+        neural_network_architecture: modelData.neuralNetworkArchitecture as Json || null,
       };
       
       const { data, error } = await supabase
@@ -208,9 +209,9 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({
       if (updates.algorithm) supabaseUpdates.algorithm = updates.algorithm;
       if (updates.accuracy !== undefined) supabaseUpdates.accuracy = updates.accuracy;
       if (updates.datasetName) supabaseUpdates.dataset_name = updates.datasetName;
-      if (updates.parameters) supabaseUpdates.parameters = updates.parameters;
+      if (updates.parameters) supabaseUpdates.parameters = updates.parameters as Json;
       if (updates.neuralNetworkArchitecture !== undefined) 
-        supabaseUpdates.neural_network_architecture = updates.neuralNetworkArchitecture;
+        supabaseUpdates.neural_network_architecture = updates.neuralNetworkArchitecture as Json;
       
       const { data, error } = await supabase
         .from('models')
