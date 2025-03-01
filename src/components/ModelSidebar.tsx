@@ -18,7 +18,9 @@ import {
   TrendingUp,
   AlertCircle,
   Loader2,
-  RefreshCw
+  RefreshCw,
+  ChevronRight,
+  ChevronLeft
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -39,7 +41,7 @@ export function ModelSidebar() {
   const [searchTerm, setSearchTerm] = useState("");
   const [typeFilter, setTypeFilter] = useState<"all" | "ML" | "DL" | "Clustering" | "Dimensionality Reduction" | "Anomaly Detection">("all");
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Filter models based on search term and type filter
   const filteredModels = models.filter(model => {
@@ -135,11 +137,11 @@ export function ModelSidebar() {
     <div className="relative h-screen">
       <Sidebar
         className={`
-          border-r
+          border-r 
           ${theme === "light" 
             ? "border-border/30 bg-background" 
             : "border-border/10 bg-background"}
-          ${sidebarOpen ? "w-80" : "w-0 -translate-x-full"}
+          ${sidebarOpen ? "w-80" : "w-0"}
           transition-all duration-300 ease-in-out
         `}
       >
@@ -162,7 +164,7 @@ export function ModelSidebar() {
           </Button>
         </SidebarHeader>
         
-        <SidebarContent className="px-4 py-3">
+        <SidebarContent className="px-4 py-3 overflow-hidden">
           <div className="space-y-4">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -175,7 +177,7 @@ export function ModelSidebar() {
               />
             </div>
             
-            <div className="flex items-center space-x-2 overflow-x-auto pb-2">
+            <div className="flex items-center space-x-2 overflow-x-auto pb-2 scrollbar-thin">
               <Button
                 variant={typeFilter === "all" ? "default" : "outline"}
                 size="sm"
@@ -267,7 +269,7 @@ export function ModelSidebar() {
             </div>
           )}
           
-          <div className="space-y-3 mt-4">
+          <div className="space-y-3 mt-4 overflow-y-auto max-h-[calc(100vh-240px)] pr-1 scrollbar-thin">
             {sortedModels.map((model) => (
               <div
                 key={model.id}
@@ -349,23 +351,28 @@ export function ModelSidebar() {
         </SidebarContent>
       </Sidebar>
       
-      <div 
-        className={`absolute left-${sidebarOpen ? "80" : "0"} top-1/2 transform -translate-y-1/2 transition-all duration-300`}
+      {/* Sidebar Toggle Button */}
+      <Button
+        variant="outline"
+        size="icon"
+        onClick={() => setSidebarOpen(!sidebarOpen)}
+        className={`
+          absolute top-4 z-10
+          ${sidebarOpen 
+            ? "left-[17rem]" 
+            : "left-4"}
+          transition-all duration-300 border
+          ${theme === "light" 
+            ? "bg-background border-border/30" 
+            : "bg-background border-border/10"}
+        `}
       >
-        <SidebarTrigger 
-          onClick={() => setSidebarOpen(!sidebarOpen)} 
-          className={`
-            flex items-center justify-center h-8 w-5 
-            bg-primary rounded-r-md border-r border-t border-b
-            ${theme === "light" 
-              ? "border-primary/30" 
-              : "border-primary/20"}
-            transition-all duration-300
-          `}
-        >
-          <div className="h-4 w-1 bg-primary-foreground rounded-full" />
-        </SidebarTrigger>
-      </div>
+        {sidebarOpen ? (
+          <ChevronLeft className="h-4 w-4" />
+        ) : (
+          <ChevronRight className="h-4 w-4" />
+        )}
+      </Button>
     </div>
   );
 }
