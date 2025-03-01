@@ -1,11 +1,10 @@
-
 import { useTheme } from "@/context/ThemeContext";
 import { useState } from "react";
 import { useModels, Algorithm } from "@/context/ModelContext";
 import { trainDimensionalityReductionModels, getBestMLModel } from "@/utils/mlAlgorithms";
 import { toast } from "sonner";
 import { 
-  SplitSquare,
+  Square,
   Timer,
   CheckCircle2,
   TrendingUp,
@@ -242,7 +241,7 @@ export function DimensionalityReductionTraining({
           {results.length > 0 && !isTraining && !isSaving && (
             <div className="space-y-4 animate-fade-in">
               <div className="flex items-center gap-2 mb-3">
-                <SplitSquare className="h-5 w-5 text-primary" />
+                <Square className="h-5 w-5 text-primary" />
                 <h3 className="text-lg font-medium">Training Results</h3>
               </div>
               
