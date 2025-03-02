@@ -1,4 +1,3 @@
-
 import React, { useState } from "react";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -6,7 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Progress } from "@/components/ui/progress";
-import { trainRandomForest, trainDecisionTree, trainLinearRegression, trainLogisticRegression, trainXGBoost } from "@/utils/mlAlgorithms";
+import { trainMLModel } from "@/utils/mlAlgorithms";
 import { Algorithm, useModels } from "@/context/ModelContext";
 import { Check, Info, Plus, X } from "lucide-react";
 import { toast } from "sonner";
@@ -86,27 +85,8 @@ export function MLTraining({ data, features, target, datasetName, onTrainingComp
 
       // Train model for each selected target
       for (const targetFeature of selectedTargets) {
-        let result;
-        
-        switch (selectedAlgorithm) {
-          case "Random Forest":
-            result = await trainRandomForest(data, features, targetFeature);
-            break;
-          case "Decision Tree":
-            result = await trainDecisionTree(data, features, targetFeature);
-            break;
-          case "Linear Regression":
-            result = await trainLinearRegression(data, features, targetFeature);
-            break;
-          case "Logistic Regression":
-            result = await trainLogisticRegression(data, features, targetFeature);
-            break;
-          case "XGBoost":
-            result = await trainXGBoost(data, features, targetFeature);
-            break;
-          default:
-            throw new Error(`Unsupported algorithm: ${selectedAlgorithm}`);
-        }
+        // Use the generic trainMLModel function instead of algorithm-specific ones
+        const result = await trainMLModel(data, features, targetFeature, selectedAlgorithm);
 
         // Add model to storage
         await addModel({

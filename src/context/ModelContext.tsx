@@ -1,7 +1,7 @@
-
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { Json } from "@/integrations/supabase/types";
 
 export type Algorithm = 
   | "Linear Regression" 
@@ -152,8 +152,10 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({
         accuracy: modelData.accuracy,
         dataset_name: modelData.datasetName,
         parameters: modelData.parameters || {},
-        neural_network_architecture: modelData.neuralNetworkArchitecture || null,
-        targets: modelData.targets || null,
+        neural_network_architecture: modelData.neuralNetworkArchitecture ? 
+          JSON.parse(JSON.stringify(modelData.neuralNetworkArchitecture)) : null,
+        targets: modelData.targets ? 
+          JSON.parse(JSON.stringify(modelData.targets)) : null,
       };
       
       const { data, error } = await supabase
