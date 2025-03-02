@@ -90,7 +90,7 @@ export function ModelStorage() {
       </CardHeader>
       <CardContent>
         {offlineMode && (
-          <Alert variant="warning" className="mb-4">
+          <Alert className="mb-4">
             <WifiOff className="h-4 w-4" />
             <AlertDescription>
               Operating in offline mode. Model changes will be stored locally.
