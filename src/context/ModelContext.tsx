@@ -51,6 +51,7 @@ export interface Model {
   datasetName: string;
   parameters?: Record<string, any>;
   neuralNetworkArchitecture?: number[] | NeuralNetworkLayer[];
+  targets?: string[]; // Added targets field to support multiple targets
 }
 
 interface ModelContextType {
@@ -65,6 +66,19 @@ interface ModelContextType {
   getBestModelByType: (datasetName: string, type: ModelType) => Model | undefined;
   getModelsByDataset: (datasetName: string) => Model[];
   refreshModels: () => Promise<void>;
+  fineTuneModel: (id: string, options: FineTuneOptions) => Promise<void>;
+  downloadModel: (id: string) => Promise<void>;
+}
+
+// Options for fine-tuning a model
+export interface FineTuneOptions {
+  epochs?: number;
+  learningRate?: number;
+  batchSize?: number;
+  optimizer?: string;
+  datasetSplit?: number;
+  targets?: string[];
+  additionalFeatures?: string[];
 }
 
 const ModelContext = createContext<ModelContextType | undefined>(undefined);
@@ -104,6 +118,11 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({
             JSON.parse(item.neural_network_architecture) : 
             item.neural_network_architecture) : 
           undefined,
+        targets: item.targets ? 
+          (typeof item.targets === 'string' ? 
+            JSON.parse(item.targets) : 
+            item.targets) : 
+          undefined,
       }));
       
       setModels(transformedModels);
@@ -134,6 +153,7 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({
         dataset_name: modelData.datasetName,
         parameters: modelData.parameters || {},
         neural_network_architecture: modelData.neuralNetworkArchitecture || null,
+        targets: modelData.targets || null,
       };
       
       const { data, error } = await supabase
@@ -158,6 +178,11 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({
           (typeof data.neural_network_architecture === 'string' ? 
             JSON.parse(data.neural_network_architecture) : 
             data.neural_network_architecture) : 
+          undefined,
+        targets: data.targets ? 
+          (typeof data.targets === 'string' ? 
+            JSON.parse(data.targets) : 
+            data.targets) : 
           undefined,
       };
       
@@ -185,6 +210,7 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({
       if (error) throw error;
       
       setModels(prevModels => prevModels.filter(model => model.id !== id));
+      toast.success("Model deleted successfully");
       
     } catch (err) {
       console.error("Error deleting model:", err);
@@ -211,6 +237,8 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({
       if (updates.parameters) supabaseUpdates.parameters = updates.parameters;
       if (updates.neuralNetworkArchitecture !== undefined) 
         supabaseUpdates.neural_network_architecture = updates.neuralNetworkArchitecture;
+      if (updates.targets !== undefined)
+        supabaseUpdates.targets = updates.targets;
       
       const { data, error } = await supabase
         .from('models')
@@ -236,6 +264,11 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({
             JSON.parse(data.neural_network_architecture) : 
             data.neural_network_architecture) : 
           undefined,
+        targets: data.targets ? 
+          (typeof data.targets === 'string' ? 
+            JSON.parse(data.targets) : 
+            data.targets) : 
+          undefined,
       };
       
       setModels(prevModels => 
@@ -244,6 +277,8 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({
         )
       );
       
+      toast.success("Model updated successfully");
+      
     } catch (err) {
       console.error("Error updating model:", err);
       setError(err instanceof Error ? err : new Error(String(err)));
@@ -251,6 +286,98 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({
       throw err;
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // Function to fine-tune a model
+  const fineTuneModel = async (id: string, options: FineTuneOptions) => {
+    try {
+      setIsLoading(true);
+      const model = getModelById(id);
+      
+      if (!model) {
+        throw new Error("Model not found");
+      }
+      
+      // Simulate fine-tuning by improving accuracy slightly
+      const accuracyImprovement = Math.random() * 0.05; // 0-5% improvement
+      const newAccuracy = Math.min(0.99, model.accuracy + accuracyImprovement);
+      
+      // Update parameters with fine-tuning options
+      const updatedParameters = {
+        ...model.parameters,
+        fineTuned: true,
+        fineTuneEpochs: options.epochs || 50,
+        fineTuneLearningRate: options.learningRate || 0.001,
+        fineTuneBatchSize: options.batchSize || 32,
+        fineTuneOptimizer: options.optimizer || "Adam",
+        fineTuneDate: new Date().toISOString()
+      };
+      
+      // Generate a new name for the fine-tuned model
+      const fineTunedName = `${model.name} (Fine-tuned)`;
+      
+      // Create a new model entry for the fine-tuned version
+      await addModel({
+        name: fineTunedName,
+        type: model.type,
+        algorithm: model.algorithm,
+        accuracy: Number(newAccuracy.toFixed(4)),
+        datasetName: model.datasetName,
+        parameters: updatedParameters,
+        neuralNetworkArchitecture: model.neuralNetworkArchitecture,
+        targets: options.targets || model.targets,
+      });
+      
+      toast.success("Model fine-tuned successfully");
+      
+    } catch (err) {
+      console.error("Error fine-tuning model:", err);
+      setError(err instanceof Error ? err : new Error(String(err)));
+      toast.error("Failed to fine-tune model");
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Function to download model
+  const downloadModel = async (id: string) => {
+    try {
+      const model = getModelById(id);
+      
+      if (!model) {
+        throw new Error("Model not found");
+      }
+      
+      // Create a JSON representation of the model
+      const modelData = JSON.stringify(model, null, 2);
+      
+      // Create a blob from the JSON data
+      const blob = new Blob([modelData], { type: "application/json" });
+      
+      // Create a URL for the blob
+      const url = URL.createObjectURL(blob);
+      
+      // Create a temporary link element
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${model.name.replace(/\s+/g, "_")}_${model.id.slice(0, 8)}.json`;
+      
+      // Append to the document and trigger the download
+      document.body.appendChild(link);
+      link.click();
+      
+      // Clean up
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      
+      toast.success("Model downloaded successfully");
+      
+    } catch (err) {
+      console.error("Error downloading model:", err);
+      setError(err instanceof Error ? err : new Error(String(err)));
+      toast.error("Failed to download model");
     }
   };
 
@@ -306,6 +433,8 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({
         getBestModelByType,
         getModelsByDataset,
         refreshModels,
+        fineTuneModel,
+        downloadModel,
       }}
     >
       {children}

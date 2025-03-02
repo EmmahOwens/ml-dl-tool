@@ -1,359 +1,142 @@
 
-import { useTheme } from "@/context/ThemeContext";
-import { useModels, Model } from "@/context/ModelContext";
-import { 
-  Database,
-  Calendar,
-  TrendingUp,
-  Trash2,
-  Filter,
-  Brain,
-  Search,
-  RefreshCw,
-  AlertCircle,
-  Loader2
-} from "lucide-react";
-import { useState } from "react";
-import { toast } from "sonner";
+import React, { useState, useEffect } from "react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useModels, Model, ModelType } from "@/context/ModelContext";
+import { ModelCard } from "@/components/ModelCard";
+import { Search } from "lucide-react";
 
 export function ModelStorage() {
-  const { theme } = useTheme();
-  const { models, isLoading, error, deleteModel, refreshModels } = useModels();
-  const [searchTerm, setSearchTerm] = useState("");
-  const [typeFilter, setTypeFilter] = useState<"all" | "ML" | "DL">("all");
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const { models, isLoading, refreshModels } = useModels();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedType, setSelectedType] = useState<ModelType | "All">("All");
+  const [filteredModels, setFilteredModels] = useState<Model[]>([]);
 
-  // Filter models based on search term and type filter
-  const filteredModels = models.filter(model => {
-    const matchesSearch = model.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                        model.datasetName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                        model.algorithm.toLowerCase().includes(searchTerm.toLowerCase());
+  // Refresh models on mount
+  useEffect(() => {
+    refreshModels();
+  }, [refreshModels]);
+
+  // Filter models when search query, selected type, or models change
+  useEffect(() => {
+    let result = [...models];
     
-    const matchesType = typeFilter === "all" || model.type === typeFilter;
+    // Filter by search query
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      result = result.filter(
+        model => 
+          model.name.toLowerCase().includes(query) ||
+          model.algorithm.toLowerCase().includes(query) ||
+          model.datasetName.toLowerCase().includes(query)
+      );
+    }
     
-    return matchesSearch && matchesType;
-  });
-
-  // Sort models by creation date (newest first)
-  const sortedModels = [...filteredModels].sort((a, b) => {
-    return new Date(b.created).getTime() - new Date(a.created).getTime();
-  });
-
-  const handleDeleteModel = async (id: string, name: string) => {
-    try {
-      await deleteModel(id);
-      toast.success(`Model "${name}" deleted`);
-    } catch (error) {
-      // Error is already handled in the context and a toast is shown
-      console.error("Delete model failed:", error);
+    // Filter by type
+    if (selectedType !== "All") {
+      result = result.filter(model => model.type === selectedType);
     }
-  };
+    
+    setFilteredModels(result);
+  }, [searchQuery, selectedType, models]);
 
-  const handleRefresh = async () => {
-    try {
-      setIsRefreshing(true);
-      await refreshModels();
-      toast.success("Models refreshed");
-    } catch (error) {
-      console.error("Refresh failed:", error);
-      toast.error("Failed to refresh models");
-    } finally {
-      setIsRefreshing(false);
+  // Group models by dataset
+  const modelsByDataset = filteredModels.reduce((acc, model) => {
+    const { datasetName } = model;
+    if (!acc[datasetName]) {
+      acc[datasetName] = [];
     }
-  };
-
-  const formatDate = (date: Date) => {
-    const d = new Date(date);
-    return d.toLocaleDateString() + " " + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  };
+    acc[datasetName].push(model);
+    return acc;
+  }, {} as Record<string, Model[]>);
 
   return (
-    <div className={`
-      card-container
-      ${theme === "light" ? "card-container-light" : "card-container-dark"}
-    `}>
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <Database className="h-6 w-6 text-primary" />
-          <h2 className="text-2xl font-semibold">Model Storage</h2>
-        </div>
-        
-        <div className="flex items-center gap-4">
-          <button 
-            onClick={handleRefresh}
-            disabled={isLoading || isRefreshing}
-            className={`
-              p-2 rounded-full
-              ${theme === "light" 
-                ? "hover:bg-secondary text-muted-foreground hover:text-foreground" 
-                : "hover:bg-secondary/60 text-muted-foreground hover:text-foreground"}
-              ${(isLoading || isRefreshing) ? "opacity-50 cursor-not-allowed" : ""}
-            `}
-            aria-label="Refresh models"
-          >
-            {isRefreshing ? (
-              <Loader2 className="h-5 w-5 animate-spin" />
-            ) : (
-              <RefreshCw className="h-5 w-5" />
-            )}
-          </button>
-          <div className="text-sm text-muted-foreground">
-            {models.length} model{models.length !== 1 ? "s" : ""} saved
-          </div>
-        </div>
-      </div>
-      
-      <div className="flex flex-col md:flex-row gap-4 mb-6">
-        <div className="flex-1 relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <input
-            type="text"
-            placeholder="Search models..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className={`
-              input-field pl-10
-              ${theme === "light" 
-                ? "input-field-light" 
-                : "input-field-dark"}
-            `}
-          />
-        </div>
-        
-        <div className="flex items-center gap-3">
-          <Filter className="h-4 w-4 text-muted-foreground" />
-          <div className="flex">
-            <button
-              onClick={() => setTypeFilter("all")}
-              className={`
-                px-3 py-2 text-sm rounded-l-md
-                ${typeFilter === "all"
-                  ? theme === "light"
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-primary text-primary-foreground"
-                  : theme === "light"
-                    ? "bg-secondary hover:bg-secondary/80"
-                    : "bg-secondary hover:bg-secondary/80"}
-              `}
-            >
-              All
-            </button>
-            <button
-              onClick={() => setTypeFilter("ML")}
-              className={`
-                px-3 py-2 text-sm
-                ${typeFilter === "ML"
-                  ? theme === "light"
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-primary text-primary-foreground"
-                  : theme === "light"
-                    ? "bg-secondary hover:bg-secondary/80"
-                    : "bg-secondary hover:bg-secondary/80"}
-              `}
-            >
-              ML
-            </button>
-            <button
-              onClick={() => setTypeFilter("DL")}
-              className={`
-                px-3 py-2 text-sm rounded-r-md
-                ${typeFilter === "DL"
-                  ? theme === "light"
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-primary text-primary-foreground"
-                  : theme === "light"
-                    ? "bg-secondary hover:bg-secondary/80"
-                    : "bg-secondary hover:bg-secondary/80"}
-              `}
-            >
-              DL
-            </button>
-          </div>
-        </div>
-      </div>
-      
-      {isLoading && !isRefreshing && (
-        <div className={`
-          p-8 rounded-lg text-center
-          ${theme === "light" 
-            ? "bg-secondary/50" 
-            : "bg-secondary/30"}
-        `}>
-          <Loader2 className="h-8 w-8 mx-auto mb-4 text-primary animate-spin" />
-          <p className="text-muted-foreground">Loading models...</p>
-        </div>
-      )}
-      
-      {error && (
-        <div className={`
-          p-6 rounded-lg border
-          ${theme === "light" 
-            ? "border-red-200 bg-red-50" 
-            : "border-red-900/30 bg-red-900/10"}
-        `}>
-          <div className="flex items-start gap-3">
-            <AlertCircle className={`
-              h-5 w-5 mt-0.5
-              ${theme === "light" 
-                ? "text-red-600" 
-                : "text-red-400"}
-            `} />
-            <div>
-              <h4 className={`
-                font-medium
-                ${theme === "light" 
-                  ? "text-red-800" 
-                  : "text-red-400"}
-              `}>
-                Error loading models
-              </h4>
-              <p className={`
-                text-sm mt-1
-                ${theme === "light" 
-                  ? "text-red-700" 
-                  : "text-red-500"}
-              `}>
-                {error.message || "Something went wrong. Please try refreshing."}
-              </p>
-              <button
-                onClick={handleRefresh}
-                className={`
-                  mt-3 px-3 py-1 text-sm rounded
-                  ${theme === "light" 
-                    ? "bg-red-100 text-red-800 hover:bg-red-200" 
-                    : "bg-red-900/20 text-red-400 hover:bg-red-900/30"}
-                `}
+    <Card>
+      <CardHeader>
+        <CardTitle>Model Storage</CardTitle>
+        <CardDescription>
+          View, manage, and fine-tune your trained models.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <Tabs defaultValue="all">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-2 sm:space-y-0 mb-4">
+            <TabsList>
+              <TabsTrigger value="all">All Models</TabsTrigger>
+              <TabsTrigger value="by-dataset">By Dataset</TabsTrigger>
+            </TabsList>
+            
+            <div className="flex items-center space-x-2 w-full sm:w-auto">
+              <div className="relative w-full sm:w-[200px]">
+                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search models..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-8"
+                />
+              </div>
+              <Select 
+                value={selectedType} 
+                onValueChange={(value) => setSelectedType(value as ModelType | "All")}
               >
-                Try again
-              </button>
+                <SelectTrigger className="w-[140px]">
+                  <SelectValue placeholder="Filter by type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="All">All Types</SelectItem>
+                  <SelectItem value="ML">ML</SelectItem>
+                  <SelectItem value="DL">DL</SelectItem>
+                  <SelectItem value="Clustering">Clustering</SelectItem>
+                  <SelectItem value="Dimensionality Reduction">Dim. Reduction</SelectItem>
+                  <SelectItem value="Anomaly Detection">Anomaly Detection</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
-        </div>
-      )}
-      
-      {!isLoading && !error && sortedModels.length === 0 && (
-        <div className={`
-          p-6 rounded-lg text-center
-          ${theme === "light" 
-            ? "bg-secondary/50" 
-            : "bg-secondary/30"}
-        `}>
-          <p className="text-muted-foreground">No models found</p>
-          {searchTerm || typeFilter !== "all" ? (
-            <p className="text-sm mt-2 text-muted-foreground">
-              Try adjusting your search or filter
-            </p>
-          ) : (
-            <p className="text-sm mt-2 text-muted-foreground">
-              Train some models to see them here
-            </p>
-          )}
-        </div>
-      )}
-      
-      {!isLoading && !error && sortedModels.length > 0 && (
-        <div className="grid gap-4 md:grid-cols-2">
-          {sortedModels.map((model) => (
-            <div
-              key={model.id}
-              className={`
-                p-4 rounded-lg border
-                ${theme === "light" 
-                  ? "border-border/30 shadow-neulight-sm" 
-                  : "border-border/10 shadow-neudark-sm"}
-              `}
-            >
-              <div className="flex justify-between items-start">
-                <div className="flex items-start gap-3">
-                  {model.type === "ML" ? (
-                    <TrendingUp className="h-5 w-5 mt-1 text-primary" />
-                  ) : (
-                    <Brain className="h-5 w-5 mt-1 text-accent" />
-                  )}
-                  <div>
-                    <h3 className="font-medium">{model.name}</h3>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className={`
-                        px-2 py-0.5 text-xs rounded-full
-                        ${model.type === "ML"
-                          ? theme === "light"
-                            ? "bg-primary/10 text-primary"
-                            : "bg-primary/20 text-primary-foreground"
-                          : theme === "light"
-                            ? "bg-accent/30 text-accent-foreground"
-                            : "bg-accent/40 text-accent-foreground"}
-                      `}>
-                        {model.type}
-                      </span>
-                      <span className={`
-                        px-2 py-0.5 text-xs rounded-full
-                        ${theme === "light" 
-                          ? "bg-muted/80 text-muted-foreground" 
-                          : "bg-muted/40 text-muted-foreground"}
-                      `}>
-                        {model.algorithm}
-                      </span>
+          
+          <TabsContent value="all" className="m-0">
+            {isLoading ? (
+              <div className="text-center py-8">Loading models...</div>
+            ) : filteredModels.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                No models found. Train a model first.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {filteredModels.map((model) => (
+                  <ModelCard key={model.id} model={model} />
+                ))}
+              </div>
+            )}
+          </TabsContent>
+          
+          <TabsContent value="by-dataset" className="m-0">
+            {isLoading ? (
+              <div className="text-center py-8">Loading models...</div>
+            ) : Object.keys(modelsByDataset).length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                No models found. Train a model first.
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {Object.entries(modelsByDataset).map(([datasetName, datasetModels]) => (
+                  <div key={datasetName} className="space-y-2">
+                    <h3 className="font-medium text-lg">{datasetName}</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {datasetModels.map((model) => (
+                        <ModelCard key={model.id} model={model} />
+                      ))}
                     </div>
                   </div>
-                </div>
-                
-                <button
-                  onClick={() => handleDeleteModel(model.id, model.name)}
-                  className={`
-                    p-2 rounded-full
-                    ${theme === "light" 
-                      ? "text-red-500 hover:bg-red-50" 
-                      : "text-red-400 hover:bg-red-900/20"}
-                  `}
-                  aria-label="Delete model"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
+                ))}
               </div>
-              
-              <div className="mt-4 space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Accuracy:</span>
-                  <span className={`
-                    font-medium
-                    ${model.accuracy > 0.9
-                      ? theme === "light" ? "text-green-600" : "text-green-400"
-                      : model.accuracy > 0.8
-                        ? theme === "light" ? "text-amber-600" : "text-amber-400"
-                        : theme === "light" ? "text-red-500" : "text-red-400"}
-                  `}>
-                    {(model.accuracy * 100).toFixed(2)}%
-                  </span>
-                </div>
-                
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Dataset:</span>
-                  <span className="font-medium">{model.datasetName}</span>
-                </div>
-                
-                {model.neuralNetworkArchitecture && (
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Architecture:</span>
-                    <span className="font-medium">
-                      {Array.isArray(model.neuralNetworkArchitecture) && 
-                       typeof model.neuralNetworkArchitecture[0] === 'number'
-                        ? (model.neuralNetworkArchitecture as number[]).join(" → ")
-                        : (model.neuralNetworkArchitecture as any[]).map(layer => 
-                            typeof layer === 'number' ? layer : layer.neurons
-                          ).join(" → ")}
-                    </span>
-                  </div>
-                )}
-                
-                <div className="flex items-center gap-2 text-xs text-muted-foreground mt-4">
-                  <Calendar className="h-3 w-3" />
-                  <span>{formatDate(model.created)}</span>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
+            )}
+          </TabsContent>
+        </Tabs>
+      </CardContent>
+    </Card>
   );
 }
