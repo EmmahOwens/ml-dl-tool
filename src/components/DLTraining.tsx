@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+
+import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -28,7 +29,7 @@ export function DLTraining({ data, features, target, datasetName, onTrainingComp
   const [isTraining, setIsTraining] = useState(false);
   const [trainingProgress, setTrainingProgress] = useState(0);
   const [selectedTargets, setSelectedTargets] = useState<string[]>([target]);
-  const [currentTarget, setCurrentTarget] = useState<string>(target);
+  const [currentTarget, setCurrentTarget] = useState<string>("");
   const [trainingResults, setTrainingResults] = useState<{target: string, accuracy: number, layers: number}[]>([]);
   
   // Neural network parameters
@@ -39,15 +40,38 @@ export function DLTraining({ data, features, target, datasetName, onTrainingComp
   const [epochs, setEpochs] = useState(100);
   const [learningRate, setLearningRate] = useState(0.001);
 
+  // Update currentTarget when available features change
+  useEffect(() => {
+    const availableFeatures = features.filter(f => !selectedTargets.includes(f));
+    if (availableFeatures.length > 0 && !currentTarget) {
+      setCurrentTarget(availableFeatures[0]);
+    }
+  }, [features, selectedTargets, currentTarget]);
+
   const addTarget = () => {
     if (currentTarget && !selectedTargets.includes(currentTarget)) {
       setSelectedTargets([...selectedTargets, currentTarget]);
+      // Reset currentTarget after adding
+      const availableFeatures = features.filter(f => 
+        ![...selectedTargets, currentTarget].includes(f)
+      );
+      if (availableFeatures.length > 0) {
+        setCurrentTarget(availableFeatures[0]);
+      } else {
+        setCurrentTarget("");
+      }
     }
   };
 
   const removeTarget = (targetToRemove: string) => {
     if (selectedTargets.length > 1) {
-      setSelectedTargets(selectedTargets.filter(t => t !== targetToRemove));
+      const newTargets = selectedTargets.filter(t => t !== targetToRemove);
+      setSelectedTargets(newTargets);
+      
+      // If currentTarget is empty, set it to the removed target
+      if (!currentTarget) {
+        setCurrentTarget(targetToRemove);
+      }
     } else {
       toast.error("At least one target is required");
     }

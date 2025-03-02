@@ -6,13 +6,37 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useModels, Model, ModelType } from "@/context/ModelContext";
 import { ModelCard } from "@/components/ModelCard";
-import { Search } from "lucide-react";
+import { AlertCircle, Search, WifiOff } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 export function ModelStorage() {
-  const { models, isLoading, refreshModels } = useModels();
+  const { models, isLoading, error, refreshModels } = useModels();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedType, setSelectedType] = useState<ModelType | "All">("All");
   const [filteredModels, setFilteredModels] = useState<Model[]>([]);
+  const [offlineMode, setOfflineMode] = useState(false);
+  
+  // Check if we're in offline mode based on fetch errors
+  useEffect(() => {
+    const checkOnlineStatus = async () => {
+      try {
+        await fetch('/api/health-check', { 
+          method: 'HEAD',
+          cache: 'no-cache',
+          headers: { 'Cache-Control': 'no-cache' }
+        });
+        setOfflineMode(false);
+      } catch (error) {
+        setOfflineMode(true);
+      }
+    };
+    
+    // Check immediately and then every 30 seconds
+    checkOnlineStatus();
+    const interval = setInterval(checkOnlineStatus, 30000);
+    
+    return () => clearInterval(interval);
+  }, []);
 
   // Refresh models on mount
   useEffect(() => {
@@ -65,6 +89,15 @@ export function ModelStorage() {
         </CardDescription>
       </CardHeader>
       <CardContent>
+        {offlineMode && (
+          <Alert variant="warning" className="mb-4">
+            <WifiOff className="h-4 w-4" />
+            <AlertDescription>
+              Operating in offline mode. Model changes will be stored locally.
+            </AlertDescription>
+          </Alert>
+        )}
+        
         <Tabs defaultValue="all">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-2 sm:space-y-0 mb-4">
             <TabsList>

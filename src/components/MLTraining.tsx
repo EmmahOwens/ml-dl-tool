@@ -1,14 +1,23 @@
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Progress } from "@/components/ui/progress";
-import { trainMLModel, trainAllMLModels, getBestMLModel } from "@/utils/mlAlgorithms";
 import { Algorithm, useModels } from "@/context/ModelContext";
-import { Check, Info, Plus, X } from "lucide-react";
+import { 
+  trainMLModel, 
+  trainAllMLModels, 
+  isClusteringAlgorithm,
+  isDimensionalityReductionAlgorithm,
+  isAnomalyDetectionAlgorithm,
+  getModelTypeForAlgorithm
+} from "@/utils/mlAlgorithms";
+import { Check, Info, Sparkles, Plus, X } from "lucide-react";
 import { toast } from "sonner";
 
 interface MLTrainingProps {
@@ -19,127 +28,146 @@ interface MLTrainingProps {
   onTrainingComplete: () => void;
 }
 
-export function MLTraining({ data, features, target, datasetName, onTrainingComplete }: MLTrainingProps) {
+export function MLTraining({
+  data,
+  features,
+  target,
+  datasetName,
+  onTrainingComplete,
+}: MLTrainingProps) {
   const { addModel } = useModels();
   const [isTraining, setIsTraining] = useState(false);
   const [trainingProgress, setTrainingProgress] = useState(0);
-  const [selectedTargets, setSelectedTargets] = useState<string[]>([target]); 
-  const [currentTarget, setCurrentTarget] = useState<string>(target);
-  const [algorithmResults, setAlgorithmResults] = useState<{algorithm: Algorithm, accuracy: number}[]>([]);
-  const [trainingMode, setTrainingMode] = useState<"auto" | "single">("auto");
-  const [selectedAlgorithm, setSelectedAlgorithm] = useState<Algorithm>("Random Forest");
+  const [algorithm, setAlgorithm] = useState<Algorithm>("Random Forest");
+  const [autoMode, setAutoMode] = useState(true);
+  const [trainingResults, setTrainingResults] = useState<Array<{
+    algorithm: Algorithm;
+    accuracy: number;
+    selected: boolean;
+  }>>([]);
+  const [selectedTargets, setSelectedTargets] = useState<string[]>([target]);
+  const [currentTarget, setCurrentTarget] = useState<string>("");
 
-  const algorithmOptions: Algorithm[] = [
-    "Random Forest",
-    "Decision Tree",
-    "Linear Regression",
-    "Logistic Regression",
-    "XGBoost"
-  ];
-
-  const algorithmDescriptions: Record<Algorithm, string> = {
-    "Random Forest": "Ensemble learning method using multiple decision trees",
-    "Decision Tree": "Flow-chart-like tree structure for decision making",
-    "Linear Regression": "Models relationship between variables using linear equation",
-    "Logistic Regression": "Statistical model for binary classification",
-    "XGBoost": "Optimized gradient boosting library",
-    "SVM": "Support Vector Machine for classification and regression",
-    "KNN": "K-Nearest Neighbors algorithm",
-    "Neural Network": "Multi-layer perceptron neural network",
-    "Gradient Boosting": "Ensemble technique using gradient descent",
-    "AdaBoost": "Adaptive Boosting ensemble method",
-    "Naive Bayes": "Probabilistic classifier based on Bayes' theorem",
-    "K-Means": "Clustering algorithm to partition data",
-    "DBSCAN": "Density-based clustering algorithm",
-    "PCA": "Principal Component Analysis for dimensionality reduction",
-    "LDA": "Linear Discriminant Analysis",
-    "Gaussian Process": "Non-parametric probabilistic model",
-    "Isolation Forest": "Anomaly detection algorithm",
-    "LightGBM": "Gradient boosting framework using tree-based learning",
-    "CatBoost": "Gradient boosting framework for categorical features"
-  };
+  // Update currentTarget when available features change
+  useEffect(() => {
+    const availableFeatures = features.filter(f => !selectedTargets.includes(f));
+    if (availableFeatures.length > 0 && !currentTarget) {
+      setCurrentTarget(availableFeatures[0]);
+    }
+  }, [features, selectedTargets, currentTarget]);
 
   const addTarget = () => {
     if (currentTarget && !selectedTargets.includes(currentTarget)) {
       setSelectedTargets([...selectedTargets, currentTarget]);
+      // Reset currentTarget after adding
+      const availableFeatures = features.filter(f => 
+        ![...selectedTargets, currentTarget].includes(f)
+      );
+      if (availableFeatures.length > 0) {
+        setCurrentTarget(availableFeatures[0]);
+      } else {
+        setCurrentTarget("");
+      }
     }
   };
 
   const removeTarget = (targetToRemove: string) => {
     if (selectedTargets.length > 1) {
-      setSelectedTargets(selectedTargets.filter(t => t !== targetToRemove));
+      const newTargets = selectedTargets.filter(t => t !== targetToRemove);
+      setSelectedTargets(newTargets);
+      
+      // If currentTarget is empty, set it to the removed target
+      if (!currentTarget) {
+        setCurrentTarget(targetToRemove);
+      }
     } else {
       toast.error("At least one target is required");
     }
   };
 
   const trainModel = async () => {
-    setIsTraining(true);
-    setTrainingProgress(0);
-    setAlgorithmResults([]);
-
     try {
-      // Progress simulation
+      setIsTraining(true);
+      setTrainingProgress(0);
+      setTrainingResults([]);
+
+      // Simulate progress
       const progressInterval = setInterval(() => {
-        setTrainingProgress(prev => {
-          const newProgress = prev + Math.random() * 10;
+        setTrainingProgress((prev) => {
+          const newProgress = prev + Math.random() * 5;
           return newProgress >= 100 ? 100 : newProgress;
         });
       }, 300);
 
-      // Train models for each selected target
+      // Process each selected target
       for (const targetFeature of selectedTargets) {
-        if (trainingMode === "auto") {
-          // Train all algorithms and get results
-          const results = await trainAllMLModels(data, features, targetFeature);
-          setAlgorithmResults(results);
-          
-          // Get the best model
-          const bestModel = getBestMLModel(results);
-          
-          // Add the best model to storage
+        if (autoMode) {
+          // Train multiple algorithms
+          const allResults = await trainAllMLModels(data, features, targetFeature);
+          const bestResult = allResults.reduce(
+            (best, current) => (current.accuracy > best.accuracy ? current : best),
+            allResults[0]
+          );
+
+          // Save all results for display
+          setTrainingResults(prev => [
+            ...prev,
+            ...allResults.map(result => ({
+              algorithm: result.algorithm,
+              accuracy: result.accuracy,
+              selected: result.algorithm === bestResult.algorithm
+            }))
+          ]);
+
+          // Only save the best model to storage
           await addModel({
-            name: `${bestModel.algorithm} - ${targetFeature} (Best)`,
-            type: "ML",
-            algorithm: bestModel.algorithm,
-            accuracy: bestModel.accuracy,
+            name: `${bestResult.algorithm} - ${targetFeature}`,
+            type: getModelTypeForAlgorithm(bestResult.algorithm),
+            algorithm: bestResult.algorithm,
+            accuracy: bestResult.accuracy,
             datasetName,
-            parameters: bestModel.parameters,
+            parameters: bestResult.parameters,
             targets: [targetFeature]
           });
-          
-          toast.success(`Best model (${bestModel.algorithm}) selected for ${targetFeature} with accuracy ${(bestModel.accuracy * 100).toFixed(2)}%`);
+
+          toast.success(`Best model for ${targetFeature}: ${bestResult.algorithm} with ${(bestResult.accuracy * 100).toFixed(2)}% accuracy`);
         } else {
-          // Use the selected algorithm
-          const result = await trainMLModel(data, features, targetFeature, selectedAlgorithm);
+          // Train single algorithm
+          const result = await trainMLModel(data, features, targetFeature, algorithm);
           
-          // Add model to storage
+          setTrainingResults(prev => [
+            ...prev,
+            {
+              algorithm: result.algorithm,
+              accuracy: result.accuracy,
+              selected: true
+            }
+          ]);
+
           await addModel({
-            name: `${selectedAlgorithm} - ${targetFeature}`,
-            type: "ML",
-            algorithm: selectedAlgorithm,
+            name: `${result.algorithm} - ${targetFeature}`,
+            type: getModelTypeForAlgorithm(result.algorithm),
+            algorithm: result.algorithm,
             accuracy: result.accuracy,
             datasetName,
             parameters: result.parameters,
             targets: [targetFeature]
           });
+
+          toast.success(`Model trained for ${targetFeature}: ${(result.accuracy * 100).toFixed(2)}% accuracy`);
         }
       }
 
       clearInterval(progressInterval);
       setTrainingProgress(100);
-      
-      toast.success(`${selectedTargets.length} ML model(s) trained successfully`);
       onTrainingComplete();
     } catch (error) {
-      console.error("Training error:", error);
+      console.error("Error training model:", error);
       toast.error("Training failed. Please try again.");
     } finally {
       setIsTraining(false);
     }
   };
-
-  const availableTargets = features.filter(f => !selectedTargets.includes(f));
 
   const getAccuracyColor = (accuracy: number) => {
     if (accuracy >= 0.9) return "bg-green-500";
@@ -149,59 +177,71 @@ export function MLTraining({ data, features, target, datasetName, onTrainingComp
     return "bg-red-500";
   };
 
+  // Get available algorithms for the select dropdown
+  const getAlgorithms = () => {
+    const algorithms: Algorithm[] = [
+      "Random Forest",
+      "Decision Tree",
+      "Linear Regression",
+      "Logistic Regression",
+      "SVM",
+      "XGBoost",
+      "Gradient Boosting",
+      "AdaBoost",
+      "KNN",
+      "Naive Bayes",
+      "LightGBM",
+      "CatBoost"
+    ];
+    return algorithms;
+  };
+
+  const availableTargets = features.filter(f => !selectedTargets.includes(f));
+
   return (
     <Card>
       <CardHeader>
         <CardTitle>Machine Learning Training</CardTitle>
         <CardDescription>
-          Train machine learning models on your dataset.
+          Train classical ML models on your dataset.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div>
-          <h3 className="text-sm font-medium mb-2">Training Mode</h3>
-          <div className="flex space-x-2">
-            <Button 
-              variant={trainingMode === "auto" ? "default" : "outline"} 
-              onClick={() => setTrainingMode("auto")}
-              disabled={isTraining}
-              size="sm"
-            >
-              Auto (Compare All)
-            </Button>
-            <Button 
-              variant={trainingMode === "single" ? "default" : "outline"} 
-              onClick={() => setTrainingMode("single")}
-              disabled={isTraining}
-              size="sm"
-            >
-              Single Algorithm
-            </Button>
-          </div>
+        <div className="flex items-center space-x-2">
+          <Switch
+            id="auto-mode"
+            checked={autoMode}
+            onCheckedChange={setAutoMode}
+            disabled={isTraining}
+          />
+          <Label htmlFor="auto-mode">Auto-compare algorithms</Label>
+          {autoMode && (
+            <Badge variant="outline" className="ml-2">
+              <Sparkles className="h-3 w-3 mr-1" />
+              Best algorithm will be selected
+            </Badge>
+          )}
         </div>
 
-        {trainingMode === "single" && (
+        {!autoMode && (
           <div>
-            <h3 className="text-sm font-medium mb-2">Algorithm</h3>
-            <Select 
-              value={selectedAlgorithm} 
-              onValueChange={(value) => setSelectedAlgorithm(value as Algorithm)}
+            <Label htmlFor="algorithm">Select Algorithm</Label>
+            <Select
+              value={algorithm}
+              onValueChange={(value) => setAlgorithm(value as Algorithm)}
               disabled={isTraining}
             >
-              <SelectTrigger>
+              <SelectTrigger className="w-full">
                 <SelectValue placeholder="Select algorithm" />
               </SelectTrigger>
               <SelectContent>
-                {algorithmOptions.map((algorithm) => (
-                  <SelectItem key={algorithm} value={algorithm}>{algorithm}</SelectItem>
+                {getAlgorithms().map((alg) => (
+                  <SelectItem key={alg} value={alg}>
+                    {alg}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            {selectedAlgorithm && (
-              <p className="text-sm text-muted-foreground mt-1">
-                {algorithmDescriptions[selectedAlgorithm]}
-              </p>
-            )}
           </div>
         )}
 
@@ -259,30 +299,51 @@ export function MLTraining({ data, features, target, datasetName, onTrainingComp
           </div>
         )}
 
-        {algorithmResults.length > 0 && (
-          <div className="space-y-2 mt-4">
-            <h3 className="text-sm font-medium">Algorithm Performance</h3>
-            <div className="space-y-2">
-              {algorithmResults
-                .sort((a, b) => b.accuracy - a.accuracy)
-                .map((result, index) => (
-                  <div key={result.algorithm} className="bg-secondary/50 p-3 rounded-md">
-                    <div className="flex justify-between items-center mb-1">
-                      <div className="flex items-center">
-                        {index === 0 && <Badge className="mr-2">Best</Badge>}
-                        <span className="font-medium">{result.algorithm}</span>
-                      </div>
-                      <span className="font-medium">{(result.accuracy * 100).toFixed(2)}%</span>
-                    </div>
-                    <div className="w-full h-2 bg-secondary rounded-full overflow-hidden">
-                      <div
-                        className={`h-full rounded-full ${getAccuracyColor(result.accuracy)}`}
-                        style={{ width: `${result.accuracy * 100}%` }}
-                      />
-                    </div>
+        {trainingResults.length > 0 && (
+          <div className="space-y-4 pt-4">
+            <h3 className="text-sm font-medium">Training Results</h3>
+            
+            {/* Group results by target */}
+            {[...new Set(selectedTargets)].map(targetFeature => {
+              // Filter results for this target
+              const resultsForTarget = trainingResults.filter(r => 
+                r.algorithm === algorithm || autoMode
+              );
+              
+              if (resultsForTarget.length === 0) return null;
+              
+              return (
+                <div key={targetFeature} className="space-y-2">
+                  <h4 className="text-sm font-medium">{targetFeature}</h4>
+                  <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
+                    {resultsForTarget
+                      .sort((a, b) => b.accuracy - a.accuracy)
+                      .map((result, index) => (
+                        <div 
+                          key={`${result.algorithm}-${index}`} 
+                          className={`bg-secondary/50 p-3 rounded-md ${
+                            result.selected ? "border-2 border-primary" : ""
+                          }`}
+                        >
+                          <div className="flex justify-between items-center mb-1">
+                            <div className="flex items-center">
+                              {result.selected && <Check className="h-4 w-4 text-primary mr-1" />}
+                              <span className="font-medium">{result.algorithm}</span>
+                            </div>
+                            <span className="font-medium">{(result.accuracy * 100).toFixed(2)}%</span>
+                          </div>
+                          <div className="w-full h-2 bg-secondary rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full ${getAccuracyColor(result.accuracy)}`}
+                              style={{ width: `${result.accuracy * 100}%` }}
+                            />
+                          </div>
+                        </div>
+                      ))}
                   </div>
-                ))}
-            </div>
+                </div>
+              );
+            })}
           </div>
         )}
       </CardContent>
@@ -293,17 +354,17 @@ export function MLTraining({ data, features, target, datasetName, onTrainingComp
             <div className="flex items-center text-sm text-muted-foreground">
               <Info className="h-4 w-4 mr-1" />
               <span>
-                {trainingMode === "auto" 
-                  ? `Will train and compare all algorithms on ${selectedTargets.join(", ")}`
-                  : `Will train ${selectedAlgorithm} on ${selectedTargets.join(", ")}`}
+                {autoMode
+                  ? "Multiple algorithms will be compared"
+                  : `Training with ${algorithm}`}
               </span>
             </div>
-            <Button 
-              onClick={trainModel} 
-              disabled={isTraining || selectedTargets.length === 0}
+            <Button
+              onClick={trainModel}
+              disabled={isTraining}
               className="sm:w-auto w-full"
             >
-              {isTraining ? "Training..." : "Train Model"}
+              {isTraining ? "Training..." : "Train ML Model"}
               {!isTraining && <Check className="ml-2 h-4 w-4" />}
             </Button>
           </div>
