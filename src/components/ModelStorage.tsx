@@ -30,7 +30,11 @@ export function ModelStorage() {
         model => 
           model.name.toLowerCase().includes(query) ||
           model.algorithm.toLowerCase().includes(query) ||
-          model.datasetName.toLowerCase().includes(query)
+          model.datasetName.toLowerCase().includes(query) ||
+          // Also search in targets
+          (model.targets && model.targets.some(target => 
+            target.toLowerCase().includes(query)
+          ))
       );
     }
     

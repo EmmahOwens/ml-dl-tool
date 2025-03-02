@@ -75,6 +75,7 @@ export type Database = {
           name: string
           neural_network_architecture: Json | null
           parameters: Json | null
+          targets: Json | null
           type: string
         }
         Insert: {
@@ -86,6 +87,7 @@ export type Database = {
           name: string
           neural_network_architecture?: Json | null
           parameters?: Json | null
+          targets?: Json | null
           type: string
         }
         Update: {
@@ -97,6 +99,7 @@ export type Database = {
           name?: string
           neural_network_architecture?: Json | null
           parameters?: Json | null
+          targets?: Json | null
           type?: string
         }
         Relationships: []
