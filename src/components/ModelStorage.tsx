@@ -8,6 +8,7 @@ import { useModels, Model, ModelType } from "@/context/ModelContext";
 import { ModelCard } from "@/components/ModelCard";
 import { AlertCircle, Search, WifiOff } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export function ModelStorage() {
   const { models, isLoading, error, refreshModels } = useModels();
@@ -15,6 +16,7 @@ export function ModelStorage() {
   const [selectedType, setSelectedType] = useState<ModelType | "All">("All");
   const [filteredModels, setFilteredModels] = useState<Model[]>([]);
   const [offlineMode, setOfflineMode] = useState(false);
+  const [initialLoadComplete, setInitialLoadComplete] = useState(false);
   
   // Check if we're in offline mode based on fetch errors
   useEffect(() => {
@@ -40,7 +42,10 @@ export function ModelStorage() {
 
   // Refresh models on mount
   useEffect(() => {
-    refreshModels();
+    refreshModels().finally(() => {
+      // Set initialLoadComplete to true when the first load is done
+      setInitialLoadComplete(true);
+    });
   }, [refreshModels]);
 
   // Filter models when search query, selected type, or models change
@@ -79,6 +84,33 @@ export function ModelStorage() {
     acc[datasetName].push(model);
     return acc;
   }, {} as Record<string, Model[]>);
+
+  // Render loading skeletons
+  const renderSkeletons = () => (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      {Array.from({ length: 6 }).map((_, i) => (
+        <div key={i} className="border rounded-lg p-4 space-y-3">
+          <Skeleton className="h-5 w-2/3" />
+          <Skeleton className="h-4 w-1/2" />
+          <div className="space-y-2">
+            <div className="flex justify-between">
+              <Skeleton className="h-4 w-1/4" />
+              <Skeleton className="h-4 w-1/4" />
+            </div>
+            <div className="flex justify-between">
+              <Skeleton className="h-4 w-1/4" />
+              <Skeleton className="h-4 w-1/4" />
+            </div>
+          </div>
+          <Skeleton className="h-2 w-full mt-2" />
+          <div className="flex gap-1 mt-2">
+            <Skeleton className="h-5 w-16 rounded-full" />
+            <Skeleton className="h-5 w-16 rounded-full" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 
   return (
     <Card>
@@ -135,8 +167,8 @@ export function ModelStorage() {
           </div>
           
           <TabsContent value="all" className="m-0">
-            {isLoading ? (
-              <div className="text-center py-8">Loading models...</div>
+            {isLoading && !initialLoadComplete ? (
+              renderSkeletons()
             ) : filteredModels.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
                 No models found. Train a model first.
@@ -151,8 +183,8 @@ export function ModelStorage() {
           </TabsContent>
           
           <TabsContent value="by-dataset" className="m-0">
-            {isLoading ? (
-              <div className="text-center py-8">Loading models...</div>
+            {isLoading && !initialLoadComplete ? (
+              renderSkeletons()
             ) : Object.keys(modelsByDataset).length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
                 No models found. Train a model first.

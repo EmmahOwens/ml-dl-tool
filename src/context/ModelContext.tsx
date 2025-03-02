@@ -83,6 +83,38 @@ export interface FineTuneOptions {
 
 const ModelContext = createContext<ModelContextType | undefined>(undefined);
 
+// Local storage helpers
+const MODELS_STORAGE_KEY = 'app_models_data';
+
+const saveModelsToLocalStorage = (models: Model[]) => {
+  try {
+    // Convert dates to ISO strings for storage
+    const modelsForStorage = models.map(model => ({
+      ...model,
+      created: model.created.toISOString()
+    }));
+    localStorage.setItem(MODELS_STORAGE_KEY, JSON.stringify(modelsForStorage));
+  } catch (err) {
+    console.error("Error saving models to local storage:", err);
+  }
+};
+
+const getModelsFromLocalStorage = (): Model[] => {
+  try {
+    const storedModels = localStorage.getItem(MODELS_STORAGE_KEY);
+    if (!storedModels) return [];
+    
+    // Parse and convert ISO date strings back to Date objects
+    return JSON.parse(storedModels).map((model: any) => ({
+      ...model,
+      created: new Date(model.created)
+    }));
+  } catch (err) {
+    console.error("Error loading models from local storage:", err);
+    return [];
+  }
+};
+
 export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({ 
   children 
 }) => {
@@ -90,6 +122,7 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const [fetchErrors, setFetchErrors] = useState(0);
+  const [offlineMode, setOfflineMode] = useState(false);
 
   // Function to fetch models from Supabase
   const fetchModels = async () => {
@@ -97,12 +130,10 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({
       setIsLoading(true);
       setError(null);
       
-      // If we have too many consecutive fetch errors, use mock data instead
-      if (fetchErrors > 3) {
-        console.warn("Too many fetch errors, using mock data instead");
-        // Create mock data for demonstration
-        const mockModels = generateMockModels();
-        setModels(mockModels);
+      // If we're in offline mode, use local storage
+      if (offlineMode) {
+        const localModels = getModelsFromLocalStorage();
+        setModels(localModels);
         return;
       }
       
@@ -118,6 +149,7 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({
       
       // Reset fetch errors counter on success
       setFetchErrors(0);
+      setOfflineMode(false);
       
       // Transform data from Supabase format to our Model format
       const transformedModels: Model[] = data.map(item => ({
@@ -142,12 +174,23 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({
       }));
       
       setModels(transformedModels);
+      
+      // Cache to local storage
+      saveModelsToLocalStorage(transformedModels);
     } catch (err) {
       console.error("Error fetching models:", err);
       setError(err instanceof Error ? err : new Error(String(err)));
-      // Don't show toast for network errors after the first one to avoid spam
-      if (fetchErrors === 0) {
-        toast.error("Failed to load models. Using local data.");
+      
+      // Switch to offline mode after multiple errors
+      if (fetchErrors >= 2) {
+        setOfflineMode(true);
+        const localModels = getModelsFromLocalStorage();
+        setModels(localModels);
+        
+        // Only show a toast the first time we switch to offline mode
+        if (!offlineMode) {
+          toast.error("Failed to load models from server. Using local data.");
+        }
       }
     } finally {
       setIsLoading(false);
@@ -183,8 +226,26 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({
     });
   };
 
-  // Initial load
+  // Initial load and setup offline mode check
   useEffect(() => {
+    // Check if we're in offline mode
+    const checkOnlineStatus = async () => {
+      try {
+        await fetch('/api/health-check', { 
+          method: 'HEAD',
+          cache: 'no-cache',
+          headers: { 'Cache-Control': 'no-cache' }
+        });
+        setOfflineMode(false);
+      } catch (error) {
+        setOfflineMode(true);
+      }
+    };
+    
+    // Run check immediately
+    checkOnlineStatus();
+    
+    // Then fetch models
     fetchModels();
     
     // Set up auto-refresh every 30 seconds if there were fetch errors
@@ -197,20 +258,25 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({
     return () => clearInterval(intervalId);
   }, [fetchErrors]);
 
+  // Update local storage whenever models change
+  useEffect(() => {
+    saveModelsToLocalStorage(models);
+  }, [models]);
+
   const addModel = async (modelData: Omit<Model, "id" | "created">) => {
     try {
       setIsLoading(true);
       
-      // For offline mode, create a mock model
-      if (fetchErrors > 3) {
+      // For offline mode, create a local model
+      if (offlineMode) {
         const newModel: Model = {
           ...modelData,
-          id: `mock-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+          id: `local-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
           created: new Date()
         };
         
         setModels(prevModels => [newModel, ...prevModels]);
-        toast.success("Model saved successfully");
+        toast.success("Model saved locally");
         return;
       }
       
@@ -259,19 +325,21 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({
       };
       
       setModels(prevModels => [newModel, ...prevModels]);
+      toast.success("Model saved successfully");
       
     } catch (err) {
       console.error("Error adding model:", err);
       setError(err instanceof Error ? err : new Error(String(err)));
       
       // If we're having connection issues, still add the model locally
-      if (fetchErrors > 0) {
+      if (fetchErrors > 0 || offlineMode) {
         const fallbackModel: Model = {
           ...modelData,
           id: `local-${Date.now()}`,
           created: new Date()
         };
         setModels(prevModels => [fallbackModel, ...prevModels]);
+        setOfflineMode(true);
         toast.warning("Added model locally (offline mode)");
       } else {
         toast.error("Failed to save model");
@@ -286,6 +354,13 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({
     try {
       setIsLoading(true);
       
+      // If offline or it's a local model, just remove it from state
+      if (offlineMode || id.startsWith('local-') || id.startsWith('mock-')) {
+        setModels(prevModels => prevModels.filter(model => model.id !== id));
+        toast.success("Model deleted successfully");
+        return;
+      }
+      
       const { error } = await supabase
         .from('models')
         .delete()
@@ -299,8 +374,16 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({
     } catch (err) {
       console.error("Error deleting model:", err);
       setError(err instanceof Error ? err : new Error(String(err)));
-      toast.error("Failed to delete model");
-      throw err;
+      
+      // If we're having connection issues, still delete the model locally
+      if (fetchErrors > 0 || offlineMode) {
+        setModels(prevModels => prevModels.filter(model => model.id !== id));
+        setOfflineMode(true);
+        toast.warning("Deleted model locally (offline mode)");
+      } else {
+        toast.error("Failed to delete model");
+        throw err;
+      }
     } finally {
       setIsLoading(false);
     }
@@ -309,6 +392,17 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({
   const updateModel = async (id: string, updates: Partial<Omit<Model, "id" | "created">>) => {
     try {
       setIsLoading(true);
+      
+      // If offline or it's a local model, just update it in state
+      if (offlineMode || id.startsWith('local-') || id.startsWith('mock-')) {
+        setModels(prevModels => 
+          prevModels.map(model => 
+            model.id === id ? { ...model, ...updates } : model
+          )
+        );
+        toast.success("Model updated locally");
+        return;
+      }
       
       // Transform our updates to Supabase format with proper JSON serialization
       const supabaseUpdates: Record<string, any> = {};
@@ -368,8 +462,20 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({
     } catch (err) {
       console.error("Error updating model:", err);
       setError(err instanceof Error ? err : new Error(String(err)));
-      toast.error("Failed to update model");
-      throw err;
+      
+      // If we're having connection issues, still update the model locally
+      if (fetchErrors > 0 || offlineMode) {
+        setModels(prevModels => 
+          prevModels.map(model => 
+            model.id === id ? { ...model, ...updates } : model
+          )
+        );
+        setOfflineMode(true);
+        toast.warning("Updated model locally (offline mode)");
+      } else {
+        toast.error("Failed to update model");
+        throw err;
+      }
     } finally {
       setIsLoading(false);
     }
