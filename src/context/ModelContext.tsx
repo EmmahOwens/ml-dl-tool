@@ -144,18 +144,18 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({
     try {
       setIsLoading(true);
       
-      // Transform our model data to Supabase format
+      // Transform our model data to Supabase format with proper JSON serialization
       const supabaseData = {
         name: modelData.name,
         type: modelData.type,
         algorithm: modelData.algorithm,
         accuracy: modelData.accuracy,
         dataset_name: modelData.datasetName,
-        parameters: modelData.parameters || {},
+        parameters: modelData.parameters ? JSON.stringify(modelData.parameters) : null,
         neural_network_architecture: modelData.neuralNetworkArchitecture ? 
-          JSON.parse(JSON.stringify(modelData.neuralNetworkArchitecture)) : null,
+          JSON.stringify(modelData.neuralNetworkArchitecture) : null,
         targets: modelData.targets ? 
-          JSON.parse(JSON.stringify(modelData.targets)) : null,
+          JSON.stringify(modelData.targets) : null,
       };
       
       const { data, error } = await supabase
@@ -228,7 +228,7 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({
     try {
       setIsLoading(true);
       
-      // Transform our updates to Supabase format
+      // Transform our updates to Supabase format with proper JSON serialization
       const supabaseUpdates: Record<string, any> = {};
       
       if (updates.name) supabaseUpdates.name = updates.name;
@@ -236,11 +236,13 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({
       if (updates.algorithm) supabaseUpdates.algorithm = updates.algorithm;
       if (updates.accuracy !== undefined) supabaseUpdates.accuracy = updates.accuracy;
       if (updates.datasetName) supabaseUpdates.dataset_name = updates.datasetName;
-      if (updates.parameters) supabaseUpdates.parameters = updates.parameters;
+      if (updates.parameters !== undefined) 
+        supabaseUpdates.parameters = updates.parameters ? JSON.stringify(updates.parameters) : null;
       if (updates.neuralNetworkArchitecture !== undefined) 
-        supabaseUpdates.neural_network_architecture = updates.neuralNetworkArchitecture;
+        supabaseUpdates.neural_network_architecture = updates.neuralNetworkArchitecture ? 
+          JSON.stringify(updates.neuralNetworkArchitecture) : null;
       if (updates.targets !== undefined)
-        supabaseUpdates.targets = updates.targets;
+        supabaseUpdates.targets = updates.targets ? JSON.stringify(updates.targets) : null;
       
       const { data, error } = await supabase
         .from('models')

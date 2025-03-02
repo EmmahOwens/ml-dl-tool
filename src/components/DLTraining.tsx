@@ -1,4 +1,3 @@
-
 import React, { useState } from "react";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -30,6 +29,7 @@ export function DLTraining({ data, features, target, datasetName, onTrainingComp
   const [trainingProgress, setTrainingProgress] = useState(0);
   const [selectedTargets, setSelectedTargets] = useState<string[]>([target]);
   const [currentTarget, setCurrentTarget] = useState<string>(target);
+  const [trainingResults, setTrainingResults] = useState<{target: string, accuracy: number, layers: number}[]>([]);
   
   // Neural network parameters
   const [networkArchitecture, setNetworkArchitecture] = useState<NeuralNetworkLayer[]>([
@@ -73,6 +73,9 @@ export function DLTraining({ data, features, target, datasetName, onTrainingComp
   const trainModel = async () => {
     setIsTraining(true);
     setTrainingProgress(0);
+    setTrainingResults([]);
+    
+    const newResults: {target: string, accuracy: number, layers: number}[] = [];
 
     try {
       // Simulate progress
@@ -97,9 +100,21 @@ export function DLTraining({ data, features, target, datasetName, onTrainingComp
             epochs,
             learningRate
           );
+          
+          newResults.push({
+            target: targetFeature,
+            accuracy: result.accuracy,
+            layers: networkArchitecture.length
+          });
         } else {
           // Use auto-optimization
           result = await optimizeNeuralNetwork(data, features, targetFeature);
+          
+          newResults.push({
+            target: targetFeature,
+            accuracy: result.accuracy,
+            layers: Array.isArray(result.neuralNetworkArchitecture) ? result.neuralNetworkArchitecture.length : 3
+          });
         }
 
         // Add model to storage
@@ -115,6 +130,7 @@ export function DLTraining({ data, features, target, datasetName, onTrainingComp
         });
       }
 
+      setTrainingResults(newResults);
       clearInterval(progressInterval);
       setTrainingProgress(100);
       
@@ -129,6 +145,14 @@ export function DLTraining({ data, features, target, datasetName, onTrainingComp
   };
 
   const availableTargets = features.filter(f => !selectedTargets.includes(f));
+
+  const getAccuracyColor = (accuracy: number) => {
+    if (accuracy >= 0.9) return "bg-green-500";
+    if (accuracy >= 0.8) return "bg-emerald-500";
+    if (accuracy >= 0.7) return "bg-blue-500";
+    if (accuracy >= 0.6) return "bg-yellow-500";
+    return "bg-red-500";
+  };
 
   return (
     <Card>
@@ -311,6 +335,36 @@ export function DLTraining({ data, features, target, datasetName, onTrainingComp
               <span>{Math.round(trainingProgress)}%</span>
             </div>
             <Progress value={trainingProgress} />
+          </div>
+        )}
+
+        {trainingResults.length > 0 && (
+          <div className="space-y-2 mt-4">
+            <h3 className="text-sm font-medium">Training Results</h3>
+            <div className="space-y-2">
+              {trainingResults
+                .sort((a, b) => b.accuracy - a.accuracy)
+                .map((result, index) => (
+                  <div key={result.target} className="bg-secondary/50 p-3 rounded-md">
+                    <div className="flex justify-between items-center mb-1">
+                      <div className="flex items-center">
+                        {index === 0 && trainingResults.length > 1 && <Badge className="mr-2">Best</Badge>}
+                        <span className="font-medium">{result.target}</span>
+                      </div>
+                      <span className="font-medium">{(result.accuracy * 100).toFixed(2)}%</span>
+                    </div>
+                    <div className="w-full h-2 bg-secondary rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full ${getAccuracyColor(result.accuracy)}`}
+                        style={{ width: `${result.accuracy * 100}%` }}
+                      />
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-1">
+                      {isCustom ? 'Custom network' : 'Auto-optimized'} with {result.layers} layers
+                    </div>
+                  </div>
+                ))}
+            </div>
           </div>
         )}
       </CardContent>

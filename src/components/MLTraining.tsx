@@ -1,3 +1,4 @@
+
 import React, { useState } from "react";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -5,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Progress } from "@/components/ui/progress";
-import { trainMLModel } from "@/utils/mlAlgorithms";
+import { trainMLModel, trainAllMLModels, getBestMLModel } from "@/utils/mlAlgorithms";
 import { Algorithm, useModels } from "@/context/ModelContext";
 import { Check, Info, Plus, X } from "lucide-react";
 import { toast } from "sonner";
@@ -20,11 +21,13 @@ interface MLTrainingProps {
 
 export function MLTraining({ data, features, target, datasetName, onTrainingComplete }: MLTrainingProps) {
   const { addModel } = useModels();
-  const [selectedAlgorithm, setSelectedAlgorithm] = useState<Algorithm>("Random Forest");
   const [isTraining, setIsTraining] = useState(false);
   const [trainingProgress, setTrainingProgress] = useState(0);
   const [selectedTargets, setSelectedTargets] = useState<string[]>([target]); 
   const [currentTarget, setCurrentTarget] = useState<string>(target);
+  const [algorithmResults, setAlgorithmResults] = useState<{algorithm: Algorithm, accuracy: number}[]>([]);
+  const [trainingMode, setTrainingMode] = useState<"auto" | "single">("auto");
+  const [selectedAlgorithm, setSelectedAlgorithm] = useState<Algorithm>("Random Forest");
 
   const algorithmOptions: Algorithm[] = [
     "Random Forest",
@@ -53,7 +56,7 @@ export function MLTraining({ data, features, target, datasetName, onTrainingComp
     "Gaussian Process": "Non-parametric probabilistic model",
     "Isolation Forest": "Anomaly detection algorithm",
     "LightGBM": "Gradient boosting framework using tree-based learning",
-    "CatBoost": "Gradient boosting algorithm for categorical features"
+    "CatBoost": "Gradient boosting framework for categorical features"
   };
 
   const addTarget = () => {
@@ -73,9 +76,10 @@ export function MLTraining({ data, features, target, datasetName, onTrainingComp
   const trainModel = async () => {
     setIsTraining(true);
     setTrainingProgress(0);
+    setAlgorithmResults([]);
 
     try {
-      // Simulate progress
+      // Progress simulation
       const progressInterval = setInterval(() => {
         setTrainingProgress(prev => {
           const newProgress = prev + Math.random() * 10;
@@ -83,21 +87,43 @@ export function MLTraining({ data, features, target, datasetName, onTrainingComp
         });
       }, 300);
 
-      // Train model for each selected target
+      // Train models for each selected target
       for (const targetFeature of selectedTargets) {
-        // Use the generic trainMLModel function instead of algorithm-specific ones
-        const result = await trainMLModel(data, features, targetFeature, selectedAlgorithm);
-
-        // Add model to storage
-        await addModel({
-          name: `${selectedAlgorithm} - ${targetFeature}`,
-          type: "ML",
-          algorithm: selectedAlgorithm,
-          accuracy: result.accuracy,
-          datasetName,
-          parameters: result.parameters,
-          targets: [targetFeature]
-        });
+        if (trainingMode === "auto") {
+          // Train all algorithms and get results
+          const results = await trainAllMLModels(data, features, targetFeature);
+          setAlgorithmResults(results);
+          
+          // Get the best model
+          const bestModel = getBestMLModel(results);
+          
+          // Add the best model to storage
+          await addModel({
+            name: `${bestModel.algorithm} - ${targetFeature} (Best)`,
+            type: "ML",
+            algorithm: bestModel.algorithm,
+            accuracy: bestModel.accuracy,
+            datasetName,
+            parameters: bestModel.parameters,
+            targets: [targetFeature]
+          });
+          
+          toast.success(`Best model (${bestModel.algorithm}) selected for ${targetFeature} with accuracy ${(bestModel.accuracy * 100).toFixed(2)}%`);
+        } else {
+          // Use the selected algorithm
+          const result = await trainMLModel(data, features, targetFeature, selectedAlgorithm);
+          
+          // Add model to storage
+          await addModel({
+            name: `${selectedAlgorithm} - ${targetFeature}`,
+            type: "ML",
+            algorithm: selectedAlgorithm,
+            accuracy: result.accuracy,
+            datasetName,
+            parameters: result.parameters,
+            targets: [targetFeature]
+          });
+        }
       }
 
       clearInterval(progressInterval);
@@ -115,6 +141,14 @@ export function MLTraining({ data, features, target, datasetName, onTrainingComp
 
   const availableTargets = features.filter(f => !selectedTargets.includes(f));
 
+  const getAccuracyColor = (accuracy: number) => {
+    if (accuracy >= 0.9) return "bg-green-500";
+    if (accuracy >= 0.8) return "bg-emerald-500";
+    if (accuracy >= 0.7) return "bg-blue-500";
+    if (accuracy >= 0.6) return "bg-yellow-500";
+    return "bg-red-500";
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -125,27 +159,51 @@ export function MLTraining({ data, features, target, datasetName, onTrainingComp
       </CardHeader>
       <CardContent className="space-y-4">
         <div>
-          <h3 className="text-sm font-medium mb-2">Algorithm</h3>
-          <Select 
-            value={selectedAlgorithm} 
-            onValueChange={(value) => setSelectedAlgorithm(value as Algorithm)}
-            disabled={isTraining}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select algorithm" />
-            </SelectTrigger>
-            <SelectContent>
-              {algorithmOptions.map((algorithm) => (
-                <SelectItem key={algorithm} value={algorithm}>{algorithm}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {selectedAlgorithm && (
-            <p className="text-sm text-muted-foreground mt-1">
-              {algorithmDescriptions[selectedAlgorithm]}
-            </p>
-          )}
+          <h3 className="text-sm font-medium mb-2">Training Mode</h3>
+          <div className="flex space-x-2">
+            <Button 
+              variant={trainingMode === "auto" ? "default" : "outline"} 
+              onClick={() => setTrainingMode("auto")}
+              disabled={isTraining}
+              size="sm"
+            >
+              Auto (Compare All)
+            </Button>
+            <Button 
+              variant={trainingMode === "single" ? "default" : "outline"} 
+              onClick={() => setTrainingMode("single")}
+              disabled={isTraining}
+              size="sm"
+            >
+              Single Algorithm
+            </Button>
+          </div>
         </div>
+
+        {trainingMode === "single" && (
+          <div>
+            <h3 className="text-sm font-medium mb-2">Algorithm</h3>
+            <Select 
+              value={selectedAlgorithm} 
+              onValueChange={(value) => setSelectedAlgorithm(value as Algorithm)}
+              disabled={isTraining}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select algorithm" />
+              </SelectTrigger>
+              <SelectContent>
+                {algorithmOptions.map((algorithm) => (
+                  <SelectItem key={algorithm} value={algorithm}>{algorithm}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {selectedAlgorithm && (
+              <p className="text-sm text-muted-foreground mt-1">
+                {algorithmDescriptions[selectedAlgorithm]}
+              </p>
+            )}
+          </div>
+        )}
 
         <div>
           <h3 className="text-sm font-medium mb-2">Targets</h3>
@@ -200,6 +258,33 @@ export function MLTraining({ data, features, target, datasetName, onTrainingComp
             <Progress value={trainingProgress} />
           </div>
         )}
+
+        {algorithmResults.length > 0 && (
+          <div className="space-y-2 mt-4">
+            <h3 className="text-sm font-medium">Algorithm Performance</h3>
+            <div className="space-y-2">
+              {algorithmResults
+                .sort((a, b) => b.accuracy - a.accuracy)
+                .map((result, index) => (
+                  <div key={result.algorithm} className="bg-secondary/50 p-3 rounded-md">
+                    <div className="flex justify-between items-center mb-1">
+                      <div className="flex items-center">
+                        {index === 0 && <Badge className="mr-2">Best</Badge>}
+                        <span className="font-medium">{result.algorithm}</span>
+                      </div>
+                      <span className="font-medium">{(result.accuracy * 100).toFixed(2)}%</span>
+                    </div>
+                    <div className="w-full h-2 bg-secondary rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full ${getAccuracyColor(result.accuracy)}`}
+                        style={{ width: `${result.accuracy * 100}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+            </div>
+          </div>
+        )}
       </CardContent>
       <CardFooter>
         <div className="flex flex-col w-full gap-2">
@@ -207,7 +292,11 @@ export function MLTraining({ data, features, target, datasetName, onTrainingComp
           <div className="flex flex-col sm:flex-row justify-between gap-2">
             <div className="flex items-center text-sm text-muted-foreground">
               <Info className="h-4 w-4 mr-1" />
-              <span>Will train {selectedTargets.length} model(s) on {selectedTargets.join(", ")}</span>
+              <span>
+                {trainingMode === "auto" 
+                  ? `Will train and compare all algorithms on ${selectedTargets.join(", ")}`
+                  : `Will train ${selectedAlgorithm} on ${selectedTargets.join(", ")}`}
+              </span>
             </div>
             <Button 
               onClick={trainModel} 
