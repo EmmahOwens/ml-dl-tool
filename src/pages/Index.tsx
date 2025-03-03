@@ -10,6 +10,7 @@ import { ModelProvider } from "@/context/ModelContext";
 import { AnimatedTransition } from "@/components/AnimatedTransition";
 import { Button } from "@/components/ui/button";
 import { ExternalLink } from "lucide-react";
+import { ModelDisclaimer } from "@/components/ModelDisclaimer";
 
 const Index = () => {
   const [datasetLoaded, setDatasetLoaded] = useState(false);
@@ -51,12 +52,14 @@ const Index = () => {
           
           <main className="max-w-7xl mx-auto pt-24 px-4">
             <div className="grid gap-8">
-              <div className="bg-secondary/50 p-4 rounded-lg mb-4 text-sm flex justify-between items-center">
+              <ModelDisclaimer />
+              
+              <div className="bg-secondary/50 p-4 rounded-lg mb-4 text-sm flex flex-col md:flex-row justify-between gap-4">
                 <div>
-                  This is a demonstration application that simulates ML/DL training workflows.
-                  For actual model training with real capabilities, check out popular ML libraries.
+                  Want to build real, production-ready machine learning models? Check out these industry-standard 
+                  ML libraries that provide actual training and prediction capabilities.
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   <Button variant="outline" size="sm" asChild>
                     <a href="https://scikit-learn.org" target="_blank" rel="noopener noreferrer" className="flex items-center gap-1">
                       scikit-learn <ExternalLink className="h-3 w-3" />

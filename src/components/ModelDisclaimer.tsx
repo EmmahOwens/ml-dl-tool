@@ -5,7 +5,7 @@ import { Info } from "lucide-react";
 
 export function ModelDisclaimer() {
   return (
-    <Alert variant="warning" className="mb-4">
+    <Alert className="mb-4">
       <Info className="h-4 w-4" />
       <AlertTitle>Simulation Notice</AlertTitle>
       <AlertDescription>
