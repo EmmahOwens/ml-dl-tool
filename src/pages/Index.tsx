@@ -8,6 +8,8 @@ import { ModelStorage } from "@/components/ModelStorage";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { ModelProvider } from "@/context/ModelContext";
 import { AnimatedTransition } from "@/components/AnimatedTransition";
+import { Button } from "@/components/ui/button";
+import { ExternalLink } from "lucide-react";
 
 const Index = () => {
   const [datasetLoaded, setDatasetLoaded] = useState(false);
@@ -49,6 +51,30 @@ const Index = () => {
           
           <main className="max-w-7xl mx-auto pt-24 px-4">
             <div className="grid gap-8">
+              <div className="bg-secondary/50 p-4 rounded-lg mb-4 text-sm flex justify-between items-center">
+                <div>
+                  This is a demonstration application that simulates ML/DL training workflows.
+                  For actual model training with real capabilities, check out popular ML libraries.
+                </div>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" asChild>
+                    <a href="https://scikit-learn.org" target="_blank" rel="noopener noreferrer" className="flex items-center gap-1">
+                      scikit-learn <ExternalLink className="h-3 w-3" />
+                    </a>
+                  </Button>
+                  <Button variant="outline" size="sm" asChild>
+                    <a href="https://www.tensorflow.org" target="_blank" rel="noopener noreferrer" className="flex items-center gap-1">
+                      TensorFlow <ExternalLink className="h-3 w-3" />
+                    </a>
+                  </Button>
+                  <Button variant="outline" size="sm" asChild>
+                    <a href="https://pytorch.org" target="_blank" rel="noopener noreferrer" className="flex items-center gap-1">
+                      PyTorch <ExternalLink className="h-3 w-3" />
+                    </a>
+                  </Button>
+                </div>
+              </div>
+              
               <AnimatedTransition>
                 <DatasetUploader onDatasetLoad={handleDatasetLoad} />
               </AnimatedTransition>

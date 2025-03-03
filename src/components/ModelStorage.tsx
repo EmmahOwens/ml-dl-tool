@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -11,6 +10,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Pagination, PaginationContent, PaginationItem, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
+import { ModelDisclaimer } from "@/components/ModelDisclaimer";
 
 export function ModelStorage() {
   const { models, isLoading, error, refreshModels } = useModels();
@@ -20,7 +20,6 @@ export function ModelStorage() {
   const [offlineMode, setOfflineMode] = useState(false);
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
   
-  // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(9);
   const [paginatedModels, setPaginatedModels] = useState<Model[]>([]);
@@ -72,11 +71,9 @@ export function ModelStorage() {
     }
     
     setFilteredModels(result);
-    // Reset to first page when filters change
     setCurrentPage(1);
   }, [searchQuery, selectedType, models]);
 
-  // Handle pagination
   useEffect(() => {
     const startIndex = (currentPage - 1) * itemsPerPage;
     const endIndex = startIndex + itemsPerPage;
@@ -94,20 +91,16 @@ export function ModelStorage() {
     return acc;
   }, {} as Record<string, Model[]>);
 
-  // Process pagination for grouped models
   const getPaginatedModelsByDataset = () => {
     const startIndex = (currentPage - 1) * itemsPerPage;
     const endIndex = startIndex + itemsPerPage;
     
-    // Create a new object with paginated models for each dataset
     const result: Record<string, Model[]> = {};
     let currentCount = 0;
     
     for (const [datasetName, models] of Object.entries(modelsByDataset)) {
-      // If we've already included enough models for this page, skip
       if (currentCount >= itemsPerPage) break;
       
-      // If we're past the start index, start including models
       if (currentCount + models.length > startIndex) {
         const modelsToInclude = models.slice(
           Math.max(0, startIndex - currentCount), 
@@ -169,7 +162,6 @@ export function ModelStorage() {
           </PaginationItem>
           
           {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-            // Show pages around current page for large page counts
             let pageToShow: number;
             if (totalPages <= 5) {
               pageToShow = i + 1;
@@ -212,6 +204,7 @@ export function ModelStorage() {
 
   return (
     <Card>
+      <ModelDisclaimer />
       <CardHeader>
         <CardTitle>Model Storage</CardTitle>
         <CardDescription>

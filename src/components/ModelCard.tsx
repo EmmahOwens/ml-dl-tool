@@ -1,4 +1,3 @@
-
 import React, { useState } from "react";
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -12,8 +11,9 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MultiSelect } from "@/components/MultiSelect";
 import { toast } from "sonner";
+import { ModelExportDialog } from "@/components/ModelExportDialog";
 
-export const ModelCard: React.FC<{ model: Model }> = ({ model }) => {
+export function ModelCard({ model }: { model: Model }) {
   const { deleteModel, downloadModel, fineTuneModel } = useModels();
   const [isFineTuneOpen, setIsFineTuneOpen] = useState(false);
   const [isDownloadOpen, setIsDownloadOpen] = useState(false);
@@ -28,8 +28,8 @@ export const ModelCard: React.FC<{ model: Model }> = ({ model }) => {
     targets: model.targets || []
   });
   const [availableTargets] = useState(["price", "sales", "revenue", "rating", "quantity", "conversion", "clicks"]);
-  
-  // Available file extensions based on model type
+  const [showExportDialog, setShowExportDialog] = useState(false);
+
   const getFileExtensions = () => {
     const commonFormats = ["json", "onnx"];
     
@@ -74,14 +74,8 @@ export const ModelCard: React.FC<{ model: Model }> = ({ model }) => {
     }
   };
 
-  const handleDownload = async () => {
-    try {
-      await downloadModel(model.id, selectedExtension);
-      setIsDownloadOpen(false);
-    } catch (error) {
-      console.error("Error downloading model:", error);
-      toast.error("Failed to download model");
-    }
+  const handleDownload = (fileExtension: string) => {
+    downloadModel(model.id, fileExtension);
   };
 
   return (
@@ -294,6 +288,14 @@ export const ModelCard: React.FC<{ model: Model }> = ({ model }) => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Export Dialog */}
+      <ModelExportDialog
+        open={showExportDialog}
+        onOpenChange={setShowExportDialog}
+        model={model}
+        onExport={handleDownload}
+      />
     </>
   );
-};
+}

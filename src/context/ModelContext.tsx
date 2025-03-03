@@ -542,11 +542,26 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({
         throw new Error("Model not found");
       }
       
-      // Create a JSON representation of the model
-      const modelData = JSON.stringify(model, null, 2);
+      // Import the model export utilities
+      const { createModelExportData } = await import('@/utils/modelExportFormats');
       
-      // Create a blob from the JSON data
-      const blob = new Blob([modelData], { type: "application/json" });
+      // Create the appropriate model data for the chosen format
+      const modelData = createModelExportData(model, fileExtension);
+      
+      // Determine the appropriate MIME type
+      let mimeType = "application/json";
+      if (['pkl', 'pickle', 'joblib'].includes(fileExtension)) {
+        mimeType = "application/octet-stream";
+      } else if (['h5', 'hdf5', 'pb', 'keras'].includes(fileExtension)) {
+        mimeType = "application/octet-stream";
+      } else if (['pt', 'pth'].includes(fileExtension)) {
+        mimeType = "application/octet-stream";
+      } else if (fileExtension === 'onnx') {
+        mimeType = "application/octet-stream";
+      }
+      
+      // Create a blob from the model data
+      const blob = new Blob([modelData], { type: mimeType });
       
       // Create a URL for the blob
       const url = URL.createObjectURL(blob);
@@ -567,7 +582,7 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
       
-      toast.success(`Model downloaded as ${fileExtension} successfully`);
+      toast.success(`Model downloaded as .${fileExtension} successfully`);
       
     } catch (err) {
       console.error("Error downloading model:", err);
