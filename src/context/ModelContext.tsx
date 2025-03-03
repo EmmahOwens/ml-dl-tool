@@ -67,7 +67,7 @@ interface ModelContextType {
   getModelsByDataset: (datasetName: string) => Model[];
   refreshModels: () => Promise<void>;
   fineTuneModel: (id: string, options: FineTuneOptions) => Promise<void>;
-  downloadModel: (id: string) => Promise<void>;
+  downloadModel: (id: string, fileExtension?: string) => Promise<void>;
 }
 
 // Options for fine-tuning a model
@@ -534,7 +534,7 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({
   };
 
   // Function to download model
-  const downloadModel = async (id: string) => {
+  const downloadModel = async (id: string, fileExtension = 'json') => {
     try {
       const model = getModelById(id);
       
@@ -554,7 +554,10 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({
       // Create a temporary link element
       const link = document.createElement("a");
       link.href = url;
-      link.download = `${model.name.replace(/\s+/g, "_")}_${model.id.slice(0, 8)}.json`;
+      
+      // Format the filename with the chosen extension
+      const filename = model.name.replace(/\s+/g, "_");
+      link.download = `${filename}_${model.id.slice(0, 8)}.${fileExtension}`;
       
       // Append to the document and trigger the download
       document.body.appendChild(link);
@@ -564,7 +567,7 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
       
-      toast.success("Model downloaded successfully");
+      toast.success(`Model downloaded as ${fileExtension} successfully`);
       
     } catch (err) {
       console.error("Error downloading model:", err);

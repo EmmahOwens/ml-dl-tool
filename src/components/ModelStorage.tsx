@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -18,7 +17,6 @@ export function ModelStorage() {
   const [offlineMode, setOfflineMode] = useState(false);
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
   
-  // Check if we're in offline mode based on fetch errors
   useEffect(() => {
     const checkOnlineStatus = async () => {
       try {
@@ -33,26 +31,21 @@ export function ModelStorage() {
       }
     };
     
-    // Check immediately and then every 30 seconds
     checkOnlineStatus();
     const interval = setInterval(checkOnlineStatus, 30000);
     
     return () => clearInterval(interval);
   }, []);
 
-  // Refresh models on mount
   useEffect(() => {
     refreshModels().finally(() => {
-      // Set initialLoadComplete to true when the first load is done
       setInitialLoadComplete(true);
     });
   }, [refreshModels]);
 
-  // Filter models when search query, selected type, or models change
   useEffect(() => {
     let result = [...models];
     
-    // Filter by search query
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       result = result.filter(
@@ -60,14 +53,12 @@ export function ModelStorage() {
           model.name.toLowerCase().includes(query) ||
           model.algorithm.toLowerCase().includes(query) ||
           model.datasetName.toLowerCase().includes(query) ||
-          // Also search in targets
           (model.targets && model.targets.some(target => 
             target.toLowerCase().includes(query)
           ))
       );
     }
     
-    // Filter by type
     if (selectedType !== "All") {
       result = result.filter(model => model.type === selectedType);
     }
@@ -75,7 +66,6 @@ export function ModelStorage() {
     setFilteredModels(result);
   }, [searchQuery, selectedType, models]);
 
-  // Group models by dataset
   const modelsByDataset = filteredModels.reduce((acc, model) => {
     const { datasetName } = model;
     if (!acc[datasetName]) {
@@ -85,7 +75,6 @@ export function ModelStorage() {
     return acc;
   }, {} as Record<string, Model[]>);
 
-  // Render loading skeletons
   const renderSkeletons = () => (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
       {Array.from({ length: 6 }).map((_, i) => (

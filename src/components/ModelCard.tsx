@@ -16,6 +16,8 @@ import { toast } from "sonner";
 export const ModelCard: React.FC<{ model: Model }> = ({ model }) => {
   const { deleteModel, downloadModel, fineTuneModel } = useModels();
   const [isFineTuneOpen, setIsFineTuneOpen] = useState(false);
+  const [isDownloadOpen, setIsDownloadOpen] = useState(false);
+  const [selectedExtension, setSelectedExtension] = useState("json");
   const [isDeleting, setIsDeleting] = useState(false);
   const [fineTuneOptions, setFineTuneOptions] = useState({
     epochs: 50,
@@ -26,6 +28,19 @@ export const ModelCard: React.FC<{ model: Model }> = ({ model }) => {
     targets: model.targets || []
   });
   const [availableTargets] = useState(["price", "sales", "revenue", "rating", "quantity", "conversion", "clicks"]);
+  
+  // Available file extensions based on model type
+  const getFileExtensions = () => {
+    const commonFormats = ["json", "onnx"];
+    
+    if (model.type === "ML") {
+      return [...commonFormats, "pkl", "pickle", "joblib"];
+    } else if (model.type === "DL") {
+      return [...commonFormats, "h5", "keras", "pb", "pt", "pth"];
+    }
+    
+    return commonFormats;
+  };
 
   const getAccuracyColor = (accuracy: number) => {
     if (accuracy >= 0.9) return "bg-green-500";
@@ -61,7 +76,8 @@ export const ModelCard: React.FC<{ model: Model }> = ({ model }) => {
 
   const handleDownload = async () => {
     try {
-      await downloadModel(model.id);
+      await downloadModel(model.id, selectedExtension);
+      setIsDownloadOpen(false);
     } catch (error) {
       console.error("Error downloading model:", error);
       toast.error("Failed to download model");
@@ -88,7 +104,7 @@ export const ModelCard: React.FC<{ model: Model }> = ({ model }) => {
                 <Settings className="mr-2 h-4 w-4" />
                 Fine-tune
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleDownload}>
+              <DropdownMenuItem onClick={() => setIsDownloadOpen(true)}>
                 <Download className="mr-2 h-4 w-4" />
                 Download
               </DropdownMenuItem>
@@ -140,6 +156,7 @@ export const ModelCard: React.FC<{ model: Model }> = ({ model }) => {
         </CardFooter>
       </Card>
 
+      {/* Fine-tune Dialog */}
       <Dialog open={isFineTuneOpen} onOpenChange={setIsFineTuneOpen}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
@@ -231,6 +248,48 @@ export const ModelCard: React.FC<{ model: Model }> = ({ model }) => {
             </Button>
             <Button onClick={handleFineTune}>
               Fine-tune
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Download Dialog */}
+      <Dialog open={isDownloadOpen} onOpenChange={setIsDownloadOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Download Model</DialogTitle>
+            <DialogDescription>
+              Choose a file format to download the {model.name} model.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="fileExtension" className="text-right">
+                File Format
+              </Label>
+              <Select
+                value={selectedExtension}
+                onValueChange={setSelectedExtension}
+              >
+                <SelectTrigger className="col-span-3">
+                  <SelectValue placeholder="Select file format" />
+                </SelectTrigger>
+                <SelectContent>
+                  {getFileExtensions().map((ext) => (
+                    <SelectItem key={ext} value={ext}>
+                      .{ext}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsDownloadOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleDownload}>
+              Download
             </Button>
           </DialogFooter>
         </DialogContent>
