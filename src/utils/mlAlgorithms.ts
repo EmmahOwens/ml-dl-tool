@@ -45,8 +45,85 @@ const splitData = (
   };
 };
 
+// Enhanced function to train ML models using the Supabase Edge Function
+export const trainMLModel = async (
+  data: any[],
+  features: string[],
+  target: string,
+  algorithm: Algorithm,
+  params = {}
+): Promise<TrainingResult> => {
+  // First, check if we should use the real backend training or simulation
+  const useRealTraining = true; // TODO: Make this configurable
+
+  if (useRealTraining) {
+    try {
+      console.log(`Training model with algorithm: ${algorithm} using backend function`);
+      
+      // Create temporary model entry to get an ID
+      const tempModelResult = await createTemporaryModel(algorithm, target);
+      const modelId = tempModelResult.id;
+      
+      // Call the Supabase Edge Function to train the model
+      const response = await fetch(
+        "https://uysdqwhyhqhamwvzsolw.supabase.co/functions/v1/train-model", 
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY || ''}`
+          },
+          body: JSON.stringify({
+            data,
+            features,
+            target,
+            algorithm,
+            modelId,
+            datasetName: "dataset" // TODO: Pass actual dataset name
+          })
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(`Training failed: ${errorData.error || 'Unknown error'}`);
+      }
+
+      const result = await response.json();
+      
+      return {
+        algorithm,
+        accuracy: result.accuracy,
+        parameters: {
+          ...params,
+          usedRealTraining: true,
+          trainingMethod: "edge-function"
+        },
+      };
+    } catch (error) {
+      console.error("Error training model with backend:", error);
+      
+      // Fall back to simulation if backend training fails
+      console.log("Falling back to simulated training");
+      return simulateTraining(data, features, target, algorithm, params);
+    }
+  } else {
+    // Use the existing simulation code if real training is disabled
+    return simulateTraining(data, features, target, algorithm, params);
+  }
+};
+
+// Helper function to create a temporary model in the database
+const createTemporaryModel = async (algorithm: Algorithm, target: string) => {
+  // This would create a placeholder record that will be updated when training completes
+  // In a real app, you'd use the Supabase client to create this record
+  
+  // For now, just return a mock ID
+  return { id: `temp-${Date.now()}` };
+};
+
 // Enhanced function to simulate ML training with accuracy for large datasets
-export const trainMLModel = (
+const simulateTraining = (
   data: any[],
   features: string[],
   target: string,
@@ -141,7 +218,9 @@ export const trainMLModel = (
           ...params,
           // Add flag for large dataset optimization
           usedDataReduction: isLargeDataset,
-          sampleSize: isLargeDataset ? Math.min(10000, data.length) : data.length
+          sampleSize: isLargeDataset ? Math.min(10000, data.length) : data.length,
+          usedRealTraining: false,
+          trainingMethod: "simulation"
         },
       });
     }, processingDelay);

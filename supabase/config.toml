@@ -1,1 +1,8 @@
+
 project_id = "uysdqwhyhqhamwvzsolw"
+[api]
+enabled_schemas = ["public", "storage"]
+[functions.train-model]
+verify_jwt = false
+[functions.predict-with-model]
+verify_jwt = false

@@ -68,6 +68,7 @@ interface ModelContextType {
   refreshModels: () => Promise<void>;
   fineTuneModel: (id: string, options: FineTuneOptions) => Promise<void>;
   downloadModel: (id: string, fileExtension?: string) => Promise<void>;
+  predictWithModel: (id: string, inputData: any[]) => Promise<{ predictions: any; success: boolean }>;
 }
 
 // Options for fine-tuning a model
@@ -629,6 +630,54 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({
     return models.filter(model => model.datasetName === datasetName);
   };
 
+  // Add the new predictWithModel function
+  const predictWithModel = async (id: string, inputData: any[]): Promise<{ predictions: any; success: boolean }> => {
+    try {
+      const model = getModelById(id);
+      
+      if (!model) {
+        throw new Error("Model not found");
+      }
+      
+      // Call the Supabase Edge Function for prediction
+      const response = await fetch(
+        "https://uysdqwhyhqhamwvzsolw.supabase.co/functions/v1/predict-with-model",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY || ''}`
+          },
+          body: JSON.stringify({
+            modelId: id,
+            inputData
+          })
+        }
+      );
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(`Prediction failed: ${errorData.error || 'Unknown error'}`);
+      }
+      
+      const result = await response.json();
+      
+      // Return the predictions
+      return {
+        predictions: result.predictions,
+        success: true
+      };
+    } catch (error) {
+      console.error("Error making prediction:", error);
+      toast.error(`Prediction failed: ${error.message}`);
+      
+      return {
+        predictions: null,
+        success: false
+      };
+    }
+  };
+
   return (
     <ModelContext.Provider
       value={{
@@ -645,6 +694,7 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({
         refreshModels,
         fineTuneModel,
         downloadModel,
+        predictWithModel,
       }}
     >
       {children}

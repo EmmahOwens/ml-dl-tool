@@ -1,164 +1,221 @@
+
 import React, { useState } from "react";
-import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Model, useModels } from "@/context/ModelContext";
-import { Download, MoreVertical, Trash, Settings } from "lucide-react";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { MultiSelect } from "@/components/MultiSelect";
-import { toast } from "sonner";
+import { Model, useModels } from "@/context/ModelContext";
 import { ModelExportDialog } from "@/components/ModelExportDialog";
+import { getRecommendedExtensions } from "@/utils/modelExportFormats";
+import { Download, BarChart, Trash, FileCode, Settings, Database, Brain } from "lucide-react";
+import { toast } from "sonner";
+import { formatDate } from "@/lib/utils";
 
-export function ModelCard({ model }: { model: Model }) {
-  const { deleteModel, downloadModel, fineTuneModel } = useModels();
-  const [isFineTuneOpen, setIsFineTuneOpen] = useState(false);
-  const [isDownloadOpen, setIsDownloadOpen] = useState(false);
-  const [selectedExtension, setSelectedExtension] = useState("json");
-  const [isDeleting, setIsDeleting] = useState(false);
+interface ModelCardProps {
+  model: Model;
+}
+
+export function ModelCard({ model }: ModelCardProps) {
+  const { deleteModel, updateModel, downloadModel, fineTuneModel, predictWithModel } = useModels();
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [isFineTuningOpen, setIsFineTuningOpen] = useState(false);
+  const [isPredictionOpen, setIsPredictionOpen] = useState(false);
   const [fineTuneOptions, setFineTuneOptions] = useState({
     epochs: 50,
     learningRate: 0.001,
-    batchSize: 32,
-    optimizer: "Adam",
-    datasetSplit: 0.2,
-    targets: model.targets || []
   });
-  const [availableTargets] = useState(["price", "sales", "revenue", "rating", "quantity", "conversion", "clicks"]);
-  const [showExportDialog, setShowExportDialog] = useState(false);
+  const [predictionInput, setPredictionInput] = useState("");
+  const [predictionResult, setPredictionResult] = useState<any>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const getFileExtensions = () => {
-    const commonFormats = ["json", "onnx"];
-    
-    if (model.type === "ML") {
-      return [...commonFormats, "pkl", "pickle", "joblib"];
-    } else if (model.type === "DL") {
-      return [...commonFormats, "h5", "keras", "pb", "pt", "pth"];
+  const handleDelete = async () => {
+    try {
+      await deleteModel(model.id);
+      setConfirmDelete(false);
+      toast.success("Model deleted successfully");
+    } catch (error) {
+      toast.error("Failed to delete model");
     }
-    
-    return commonFormats;
   };
 
-  const getAccuracyColor = (accuracy: number) => {
-    if (accuracy >= 0.9) return "bg-green-500";
-    if (accuracy >= 0.8) return "bg-emerald-500";
-    if (accuracy >= 0.7) return "bg-blue-500";
-    if (accuracy >= 0.6) return "bg-yellow-500";
-    return "bg-red-500";
+  const handleExport = async (fileExtension: string) => {
+    try {
+      await downloadModel(model.id, fileExtension);
+    } catch (error) {
+      toast.error("Failed to export model");
+    }
   };
 
   const handleFineTune = async () => {
     try {
+      setIsSubmitting(true);
       await fineTuneModel(model.id, fineTuneOptions);
-      setIsFineTuneOpen(false);
-      toast.success("Model fine-tuning started");
+      setIsFineTuningOpen(false);
+      toast.success("Model fine-tuned successfully");
     } catch (error) {
-      console.error("Error fine-tuning model:", error);
       toast.error("Failed to fine-tune model");
-    }
-  };
-
-  const handleDelete = async () => {
-    try {
-      setIsDeleting(true);
-      await deleteModel(model.id);
-      toast.success("Model deleted successfully");
-    } catch (error) {
-      console.error("Error deleting model:", error);
-      toast.error("Failed to delete model");
     } finally {
-      setIsDeleting(false);
+      setIsSubmitting(false);
     }
   };
 
-  const handleDownload = (fileExtension: string) => {
-    downloadModel(model.id, fileExtension);
+  const handlePredict = async () => {
+    try {
+      setIsSubmitting(true);
+      
+      // Parse input data (assuming comma-separated values for simplicity)
+      const inputValues = predictionInput.split(',').map(val => {
+        const parsed = parseFloat(val.trim());
+        return isNaN(parsed) ? val.trim() : parsed;
+      });
+      
+      const result = await predictWithModel(model.id, [inputValues]);
+      
+      if (result.success) {
+        setPredictionResult(result.predictions);
+        toast.success("Prediction successful");
+      } else {
+        toast.error("Prediction failed");
+      }
+    } catch (error) {
+      toast.error(`Prediction error: ${error.message}`);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
+
+  // Calculate color for the accuracy badge
+  const getAccuracyColor = (accuracy: number) => {
+    if (accuracy >= 0.9) return "green";
+    if (accuracy >= 0.8) return "emerald";
+    if (accuracy >= 0.7) return "blue";
+    if (accuracy >= 0.6) return "yellow";
+    return "red";
+  };
+
+  const accuracyColor = getAccuracyColor(model.accuracy);
+  const accuracyPercent = (model.accuracy * 100).toFixed(1);
+  
+  // Check if model can be used for prediction
+  const canMakePredictions = true; // model.is_trained or some other condition
 
   return (
     <>
-      <Card className="overflow-hidden transition-all hover:shadow-md">
-        <CardHeader className="p-4 pb-2 flex flex-row justify-between items-start">
-          <div>
-            <h3 className="font-medium text-base truncate">{model.name}</h3>
-            <p className="text-sm text-muted-foreground truncate">{model.algorithm}</p>
+      <Card className="overflow-hidden">
+        <CardContent className="p-4">
+          <div className="mb-2">
+            <div className="flex justify-between items-start">
+              <h3 className="font-medium truncate">{model.name}</h3>
+              <Badge variant="outline">{model.type}</Badge>
+            </div>
+            <p className="text-sm text-muted-foreground mt-0.5">{model.algorithm}</p>
           </div>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="-mt-1">
-                <MoreVertical className="h-4 w-4" />
-                <span className="sr-only">Menu</span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => setIsFineTuneOpen(true)}>
-                <Settings className="mr-2 h-4 w-4" />
-                Fine-tune
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setIsDownloadOpen(true)}>
-                <Download className="mr-2 h-4 w-4" />
-                Download
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleDelete} className="text-red-600 focus:text-red-600">
-                <Trash className="mr-2 h-4 w-4" />
-                Delete
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </CardHeader>
-        <CardContent className="p-4 pt-2">
-          <div className="grid grid-cols-2 gap-2 text-sm mb-2">
-            <div>
-              <p className="text-muted-foreground">Type</p>
-              <p>{model.type}</p>
+          
+          <div className="space-y-2">
+            <div className="flex justify-between">
+              <span className="text-sm">Accuracy</span>
+              <span className="text-sm font-medium">{accuracyPercent}%</span>
             </div>
-            <div>
-              <p className="text-muted-foreground">Dataset</p>
-              <p className="truncate">{model.datasetName}</p>
-            </div>
-          </div>
-          <div className="mt-2">
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-muted-foreground">Accuracy</span>
-              <span className="text-sm font-medium">{(model.accuracy * 100).toFixed(1)}%</span>
-            </div>
-            <div className="w-full h-2 bg-secondary rounded-full mt-1 overflow-hidden">
+            
+            <div className="w-full h-2 bg-secondary rounded-full overflow-hidden">
               <div
-                className={`h-full rounded-full ${getAccuracyColor(model.accuracy)}`}
+                className={`h-full rounded-full bg-${accuracyColor}-500`}
                 style={{ width: `${model.accuracy * 100}%` }}
               />
             </div>
+            
+            <div className="flex justify-between">
+              <span className="text-sm">Dataset</span>
+              <span className="text-sm truncate max-w-[150px]">{model.datasetName}</span>
+            </div>
+            
+            <div className="flex justify-between">
+              <span className="text-sm">Created</span>
+              <span className="text-sm">{formatDate(model.created)}</span>
+            </div>
           </div>
+          
           {model.targets && model.targets.length > 0 && (
-            <div className="mt-2">
-              <p className="text-sm text-muted-foreground mb-1">Targets</p>
+            <div className="mt-3">
+              <span className="text-sm text-muted-foreground block mb-1">Targets:</span>
               <div className="flex flex-wrap gap-1">
-                {model.targets.map((target) => (
-                  <Badge key={target} variant="secondary" className="text-xs">
-                    {target}
-                  </Badge>
+                {model.targets.map((target, i) => (
+                  <Badge key={i} variant="outline" className="text-xs">{target}</Badge>
                 ))}
               </div>
             </div>
           )}
         </CardContent>
-        <CardFooter className="p-4 pt-0 text-xs text-muted-foreground">
-          Created {model.created.toLocaleDateString()}
+        
+        <CardFooter className="bg-muted/50 px-4 py-3 flex justify-between">
+          <div className="flex space-x-1">
+            <Button variant="ghost" size="icon" onClick={() => setExportDialogOpen(true)}>
+              <FileCode className="h-4 w-4" />
+            </Button>
+            <Button variant="ghost" size="icon" onClick={() => setIsFineTuningOpen(true)}>
+              <Settings className="h-4 w-4" />
+            </Button>
+            <Button variant="ghost" size="icon" onClick={() => setConfirmDelete(true)}>
+              <Trash className="h-4 w-4" />
+            </Button>
+          </div>
+          
+          <div className="flex space-x-1">
+            {canMakePredictions && (
+              <Button variant="outline" size="sm" onClick={() => setIsPredictionOpen(true)}>
+                <Database className="h-4 w-4 mr-1" />
+                Predict
+              </Button>
+            )}
+            <Button variant="outline" size="sm" onClick={() => setExportDialogOpen(true)}>
+              <Download className="h-4 w-4 mr-1" />
+              Export
+            </Button>
+          </div>
         </CardFooter>
       </Card>
-
-      {/* Fine-tune Dialog */}
-      <Dialog open={isFineTuneOpen} onOpenChange={setIsFineTuneOpen}>
-        <DialogContent className="sm:max-w-[425px]">
+      
+      {/* Export Dialog */}
+      <ModelExportDialog
+        open={exportDialogOpen}
+        onOpenChange={setExportDialogOpen}
+        model={model}
+        onExport={handleExport}
+      />
+      
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Model</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this model? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmDelete(false)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDelete}>
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Fine-tuning Dialog */}
+      <Dialog open={isFineTuningOpen} onOpenChange={setIsFineTuningOpen}>
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>Fine-tune Model</DialogTitle>
             <DialogDescription>
-              Adjust parameters to fine-tune the {model.name} model.
+              Adjust parameters to improve model performance.
             </DialogDescription>
           </DialogHeader>
+          
           <div className="grid gap-4 py-4">
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="epochs" className="text-right">
@@ -168,134 +225,81 @@ export function ModelCard({ model }: { model: Model }) {
                 id="epochs"
                 type="number"
                 value={fineTuneOptions.epochs}
-                onChange={(e) => setFineTuneOptions({...fineTuneOptions, epochs: parseInt(e.target.value) || 1})}
+                onChange={(e) => setFineTuneOptions({...fineTuneOptions, epochs: parseInt(e.target.value)})}
                 className="col-span-3"
-                min="1"
-                max="1000"
               />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="learningRate" className="text-right">
+              <Label htmlFor="learning-rate" className="text-right">
                 Learning Rate
               </Label>
               <Input
-                id="learningRate"
+                id="learning-rate"
                 type="number"
+                step="0.0001"
                 value={fineTuneOptions.learningRate}
-                onChange={(e) => setFineTuneOptions({...fineTuneOptions, learningRate: parseFloat(e.target.value) || 0.001})}
+                onChange={(e) => setFineTuneOptions({...fineTuneOptions, learningRate: parseFloat(e.target.value)})}
                 className="col-span-3"
-                step="0.001"
-                min="0.0001"
-                max="1"
               />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="batchSize" className="text-right">
-                Batch Size
-              </Label>
-              <Input
-                id="batchSize"
-                type="number"
-                value={fineTuneOptions.batchSize}
-                onChange={(e) => setFineTuneOptions({...fineTuneOptions, batchSize: parseInt(e.target.value) || 1})}
-                className="col-span-3"
-                min="1"
-                max="1024"
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="optimizer" className="text-right">
-                Optimizer
-              </Label>
-              <Select 
-                value={fineTuneOptions.optimizer} 
-                onValueChange={(value) => setFineTuneOptions({...fineTuneOptions, optimizer: value})}
-              >
-                <SelectTrigger className="col-span-3">
-                  <SelectValue placeholder="Select optimizer" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Adam">Adam</SelectItem>
-                  <SelectItem value="SGD">SGD</SelectItem>
-                  <SelectItem value="RMSprop">RMSprop</SelectItem>
-                  <SelectItem value="Adagrad">Adagrad</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="targets" className="text-right">
-                Targets
-              </Label>
-              <div className="col-span-3">
-                <MultiSelect 
-                  selected={fineTuneOptions.targets}
-                  setSelected={(selected) => setFineTuneOptions({...fineTuneOptions, targets: selected})}
-                  options={availableTargets.map(t => ({ label: t, value: t }))}
-                  placeholder="Select targets"
-                />
-              </div>
             </div>
           </div>
+          
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsFineTuneOpen(false)}>
+            <Button variant="outline" onClick={() => setIsFineTuningOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleFineTune}>
+            <Button onClick={handleFineTune} disabled={isSubmitting}>
               Fine-tune
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* Download Dialog */}
-      <Dialog open={isDownloadOpen} onOpenChange={setIsDownloadOpen}>
-        <DialogContent className="sm:max-w-[425px]">
+      
+      {/* Prediction Dialog */}
+      <Dialog open={isPredictionOpen} onOpenChange={setIsPredictionOpen}>
+        <DialogContent>
           <DialogHeader>
-            <DialogTitle>Download Model</DialogTitle>
+            <DialogTitle>Make Prediction</DialogTitle>
             <DialogDescription>
-              Choose a file format to download the {model.name} model.
+              Enter input values separated by commas to make a prediction.
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4">
+          
+          <div className="grid gap-4 py-4">
             <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="fileExtension" className="text-right">
-                File Format
+              <Label htmlFor="input-data" className="text-right">
+                Input Data
               </Label>
-              <Select
-                value={selectedExtension}
-                onValueChange={setSelectedExtension}
-              >
-                <SelectTrigger className="col-span-3">
-                  <SelectValue placeholder="Select file format" />
-                </SelectTrigger>
-                <SelectContent>
-                  {getFileExtensions().map((ext) => (
-                    <SelectItem key={ext} value={ext}>
-                      .{ext}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Input
+                id="input-data"
+                placeholder="1.2, 3.4, 5.6"
+                value={predictionInput}
+                onChange={(e) => setPredictionInput(e.target.value)}
+                className="col-span-3"
+              />
             </div>
+            
+            {predictionResult !== null && (
+              <div className="bg-secondary p-3 rounded-md">
+                <p className="font-medium">Prediction Result:</p>
+                <pre className="text-sm mt-2 overflow-x-auto">
+                  {JSON.stringify(predictionResult, null, 2)}
+                </pre>
+              </div>
+            )}
           </div>
+          
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDownloadOpen(false)}>
-              Cancel
+            <Button variant="outline" onClick={() => setIsPredictionOpen(false)}>
+              Close
             </Button>
-            <Button onClick={handleDownload}>
-              Download
+            <Button onClick={handlePredict} disabled={isSubmitting || !predictionInput.trim()}>
+              <Brain className="h-4 w-4 mr-1" />
+              Predict
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* Export Dialog */}
-      <ModelExportDialog
-        open={showExportDialog}
-        onOpenChange={setShowExportDialog}
-        model={model}
-        onExport={handleDownload}
-      />
     </>
   );
 }
