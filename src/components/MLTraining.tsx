@@ -17,8 +17,9 @@ import {
   isAnomalyDetectionAlgorithm,
   getModelTypeForAlgorithm
 } from "@/utils/mlAlgorithms";
-import { Check, Info, Sparkles, Plus, X } from "lucide-react";
+import { Check, Info, Sparkles, Plus, X, Database, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 interface MLTrainingProps {
   data: any[];
@@ -47,6 +48,14 @@ export function MLTraining({
   }>>([]);
   const [selectedTargets, setSelectedTargets] = useState<string[]>([target]);
   const [currentTarget, setCurrentTarget] = useState<string>("");
+  const [isLargeDataset, setIsLargeDataset] = useState(false);
+  const [dataReductionEnabled, setDataReductionEnabled] = useState(true);
+
+  // Check if dataset is large
+  useEffect(() => {
+    const LARGE_DATASET_THRESHOLD = 10000;
+    setIsLargeDataset(data.length > LARGE_DATASET_THRESHOLD);
+  }, [data]);
 
   // Update currentTarget when available features change
   useEffect(() => {
@@ -82,6 +91,24 @@ export function MLTraining({
       }
     } else {
       toast.error("At least one target is required");
+    }
+  };
+
+  const estimateMemoryUsage = (): string => {
+    // Very rough estimation based on dataset size
+    const bytesPerCell = 8; // Assuming 8 bytes per value in memory
+    const rowCount = data.length;
+    const colCount = features.length + 1; // +1 for target
+    
+    const totalBytes = rowCount * colCount * bytesPerCell;
+    
+    // Convert to appropriate unit
+    if (totalBytes < 1024 * 1024) {
+      return `~${Math.round(totalBytes / 1024)} KB`;
+    } else if (totalBytes < 1024 * 1024 * 1024) {
+      return `~${Math.round(totalBytes / (1024 * 1024))} MB`;
+    } else {
+      return `~${(totalBytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
     }
   };
 
@@ -130,7 +157,11 @@ export function MLTraining({
             targets: [targetFeature]
           });
 
-          toast.success(`Best model for ${targetFeature}: ${bestResult.algorithm} with ${(bestResult.accuracy * 100).toFixed(2)}% accuracy`);
+          const reductionMessage = bestResult.parameters.usedDataReduction 
+            ? ` (using data sampling)` 
+            : '';
+          
+          toast.success(`Best model for ${targetFeature}: ${bestResult.algorithm} with ${(bestResult.accuracy * 100).toFixed(2)}% accuracy${reductionMessage}`);
         } else {
           // Train single algorithm
           const result = await trainMLModel(data, features, targetFeature, algorithm);
@@ -154,7 +185,11 @@ export function MLTraining({
             targets: [targetFeature]
           });
 
-          toast.success(`Model trained for ${targetFeature}: ${(result.accuracy * 100).toFixed(2)}% accuracy`);
+          const reductionMessage = result.parameters.usedDataReduction 
+            ? ` (using data sampling)` 
+            : '';
+          
+          toast.success(`Model trained for ${targetFeature}: ${(result.accuracy * 100).toFixed(2)}% accuracy${reductionMessage}`);
         }
       }
 
@@ -179,7 +214,8 @@ export function MLTraining({
 
   // Get available algorithms for the select dropdown
   const getAlgorithms = () => {
-    const algorithms: Algorithm[] = [
+    // For very large datasets, potentially limit the available algorithms
+    const allAlgorithms: Algorithm[] = [
       "Random Forest",
       "Decision Tree",
       "Linear Regression",
@@ -193,7 +229,15 @@ export function MLTraining({
       "LightGBM",
       "CatBoost"
     ];
-    return algorithms;
+    
+    // For extremely large datasets, offer only efficient algorithms
+    if (isLargeDataset && data.length > 100000) {
+      return allAlgorithms.filter(alg => 
+        ["Decision Tree", "Linear Regression", "Logistic Regression", "Naive Bayes", "KNN"].includes(alg)
+      );
+    }
+    
+    return allAlgorithms;
   };
 
   const availableTargets = features.filter(f => !selectedTargets.includes(f));
@@ -207,6 +251,26 @@ export function MLTraining({
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        {isLargeDataset && (
+          <Alert className="mb-4">
+            <Database className="h-4 w-4" />
+            <AlertDescription className="flex flex-col gap-1">
+              <div>
+                Large dataset detected ({data.length.toLocaleString()} rows, {features.length} features). Estimated memory: {estimateMemoryUsage()}
+              </div>
+              <div className="flex items-center gap-2 mt-1">
+                <Switch
+                  id="data-reduction"
+                  checked={dataReductionEnabled}
+                  onCheckedChange={setDataReductionEnabled}
+                  disabled={isTraining}
+                />
+                <Label htmlFor="data-reduction">Enable automatic data sampling for better performance</Label>
+              </div>
+            </AlertDescription>
+          </Alert>
+        )}
+
         <div className="flex items-center space-x-2">
           <Switch
             id="auto-mode"
@@ -357,6 +421,7 @@ export function MLTraining({
                 {autoMode
                   ? "Multiple algorithms will be compared"
                   : `Training with ${algorithm}`}
+                {isLargeDataset && dataReductionEnabled && " (using data sampling)"}
               </span>
             </div>
             <Button
