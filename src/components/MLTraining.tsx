@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -15,11 +14,13 @@ import {
   isClusteringAlgorithm,
   isDimensionalityReductionAlgorithm,
   isAnomalyDetectionAlgorithm,
-  getModelTypeForAlgorithm
+  getModelTypeForAlgorithm,
+  generateColabNotebook
 } from "@/utils/mlAlgorithms";
-import { Check, Info, Sparkles, Plus, X, Database, AlertTriangle } from "lucide-react";
+import { Check, Info, Sparkles, Plus, X, Database, AlertTriangle, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 
 interface MLTrainingProps {
   data: any[];
@@ -50,14 +51,16 @@ export function MLTraining({
   const [currentTarget, setCurrentTarget] = useState<string>("");
   const [isLargeDataset, setIsLargeDataset] = useState(false);
   const [dataReductionEnabled, setDataReductionEnabled] = useState(true);
+  const [showColabDialog, setShowColabDialog] = useState(false);
+  const [colabNotebookUrl, setColabNotebookUrl] = useState<string | null>(null);
+  const [colabModelId, setColabModelId] = useState<string | null>(null);
+  const [isExportingToColab, setIsExportingToColab] = useState(false);
 
-  // Check if dataset is large
   useEffect(() => {
     const LARGE_DATASET_THRESHOLD = 10000;
     setIsLargeDataset(data.length > LARGE_DATASET_THRESHOLD);
   }, [data]);
 
-  // Update currentTarget when available features change
   useEffect(() => {
     const availableFeatures = features.filter(f => !selectedTargets.includes(f));
     if (availableFeatures.length > 0 && !currentTarget) {
@@ -68,7 +71,6 @@ export function MLTraining({
   const addTarget = () => {
     if (currentTarget && !selectedTargets.includes(currentTarget)) {
       setSelectedTargets([...selectedTargets, currentTarget]);
-      // Reset currentTarget after adding
       const availableFeatures = features.filter(f => 
         ![...selectedTargets, currentTarget].includes(f)
       );
@@ -85,7 +87,6 @@ export function MLTraining({
       const newTargets = selectedTargets.filter(t => t !== targetToRemove);
       setSelectedTargets(newTargets);
       
-      // If currentTarget is empty, set it to the removed target
       if (!currentTarget) {
         setCurrentTarget(targetToRemove);
       }
@@ -95,14 +96,12 @@ export function MLTraining({
   };
 
   const estimateMemoryUsage = (): string => {
-    // Very rough estimation based on dataset size
-    const bytesPerCell = 8; // Assuming 8 bytes per value in memory
+    const bytesPerCell = 8;
     const rowCount = data.length;
-    const colCount = features.length + 1; // +1 for target
+    const colCount = features.length + 1;
     
     const totalBytes = rowCount * colCount * bytesPerCell;
     
-    // Convert to appropriate unit
     if (totalBytes < 1024 * 1024) {
       return `~${Math.round(totalBytes / 1024)} KB`;
     } else if (totalBytes < 1024 * 1024 * 1024) {
@@ -118,7 +117,6 @@ export function MLTraining({
       setTrainingProgress(0);
       setTrainingResults([]);
 
-      // Simulate progress
       const progressInterval = setInterval(() => {
         setTrainingProgress((prev) => {
           const newProgress = prev + Math.random() * 5;
@@ -126,17 +124,14 @@ export function MLTraining({
         });
       }, 300);
 
-      // Process each selected target
       for (const targetFeature of selectedTargets) {
         if (autoMode) {
-          // Train multiple algorithms
           const allResults = await trainAllMLModels(data, features, targetFeature);
           const bestResult = allResults.reduce(
             (best, current) => (current.accuracy > best.accuracy ? current : best),
             allResults[0]
           );
 
-          // Save all results for display
           setTrainingResults(prev => [
             ...prev,
             ...allResults.map(result => ({
@@ -146,7 +141,6 @@ export function MLTraining({
             }))
           ]);
 
-          // Only save the best model to storage
           await addModel({
             name: `${bestResult.algorithm} - ${targetFeature}`,
             type: getModelTypeForAlgorithm(bestResult.algorithm),
@@ -163,7 +157,6 @@ export function MLTraining({
           
           toast.success(`Best model for ${targetFeature}: ${bestResult.algorithm} with ${(bestResult.accuracy * 100).toFixed(2)}% accuracy${reductionMessage}`);
         } else {
-          // Train single algorithm
           const result = await trainMLModel(data, features, targetFeature, algorithm);
           
           setTrainingResults(prev => [
@@ -204,6 +197,74 @@ export function MLTraining({
     }
   };
 
+  const exportToColab = async () => {
+    try {
+      setIsExportingToColab(true);
+      
+      const tempModelId = `temp-${Date.now()}`;
+      setColabModelId(tempModelId);
+      
+      const colabUrl = await generateColabNotebook({
+        data,
+        features,
+        targets: selectedTargets,
+        algorithm: autoMode ? null : algorithm,
+        datasetName,
+        modelId: tempModelId
+      });
+      
+      setColabNotebookUrl(colabUrl);
+      setShowColabDialog(true);
+      toast.success("Google Colab notebook generated successfully");
+    } catch (error) {
+      console.error("Error generating Colab notebook:", error);
+      toast.error("Failed to generate Google Colab notebook");
+    } finally {
+      setIsExportingToColab(false);
+    }
+  };
+
+  const importTrainedModel = async () => {
+    if (!colabModelId) return;
+    
+    try {
+      toast.info("Importing trained model from Google Colab...");
+      
+      const response = await fetch(
+        "https://uysdqwhyhqhamwvzsolw.supabase.co/functions/v1/import-trained-model",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY || ''}`
+          },
+          body: JSON.stringify({
+            modelId: colabModelId,
+            datasetName
+          })
+        }
+      );
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(`Import failed: ${errorData.error || 'Unknown error'}`);
+      }
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        toast.success("Model imported successfully!");
+        setShowColabDialog(false);
+        onTrainingComplete();
+      } else {
+        throw new Error(result.message || "Import failed");
+      }
+    } catch (error) {
+      console.error("Error importing model:", error);
+      toast.error(`Failed to import model: ${error.message}`);
+    }
+  };
+
   const getAccuracyColor = (accuracy: number) => {
     if (accuracy >= 0.9) return "bg-green-500";
     if (accuracy >= 0.8) return "bg-emerald-500";
@@ -212,9 +273,7 @@ export function MLTraining({
     return "bg-red-500";
   };
 
-  // Get available algorithms for the select dropdown
   const getAlgorithms = () => {
-    // For very large datasets, potentially limit the available algorithms
     const allAlgorithms: Algorithm[] = [
       "Random Forest",
       "Decision Tree",
@@ -230,7 +289,6 @@ export function MLTraining({
       "CatBoost"
     ];
     
-    // For extremely large datasets, offer only efficient algorithms
     if (isLargeDataset && data.length > 100000) {
       return allAlgorithms.filter(alg => 
         ["Decision Tree", "Linear Regression", "Logistic Regression", "Naive Bayes", "KNN"].includes(alg)
@@ -367,9 +425,7 @@ export function MLTraining({
           <div className="space-y-4 pt-4">
             <h3 className="text-sm font-medium">Training Results</h3>
             
-            {/* Group results by target */}
             {[...new Set(selectedTargets)].map(targetFeature => {
-              // Filter results for this target
               const resultsForTarget = trainingResults.filter(r => 
                 r.algorithm === algorithm || autoMode
               );
@@ -424,17 +480,81 @@ export function MLTraining({
                 {isLargeDataset && dataReductionEnabled && " (using data sampling)"}
               </span>
             </div>
-            <Button
-              onClick={trainModel}
-              disabled={isTraining}
-              className="sm:w-auto w-full"
-            >
-              {isTraining ? "Training..." : "Train ML Model"}
-              {!isTraining && <Check className="ml-2 h-4 w-4" />}
-            </Button>
+            <div className="flex gap-2 sm:w-auto w-full">
+              <Button
+                variant="outline"
+                onClick={exportToColab}
+                disabled={isTraining || isExportingToColab}
+                className="sm:w-auto w-full"
+              >
+                {isExportingToColab ? "Generating..." : "Use Google Colab"}
+                <ExternalLink className="ml-2 h-4 w-4" />
+              </Button>
+              <Button
+                onClick={trainModel}
+                disabled={isTraining}
+                className="sm:w-auto w-full"
+              >
+                {isTraining ? "Training..." : "Train ML Model"}
+                {!isTraining && <Check className="ml-2 h-4 w-4" />}
+              </Button>
+            </div>
           </div>
         </div>
       </CardFooter>
+
+      <Dialog open={showColabDialog} onOpenChange={setShowColabDialog}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Train with Google Colab</DialogTitle>
+            <DialogDescription>
+              We've generated a Google Colab notebook for advanced model training with 
+              full access to Python ML libraries.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <Alert>
+              <Info className="h-4 w-4" />
+              <AlertDescription>
+                <p>Follow these steps to train your model with Google Colab:</p>
+                <ol className="list-decimal ml-5 mt-2 space-y-1">
+                  <li>Click the button below to open the notebook in Google Colab</li>
+                  <li>Run all cells in the notebook (Runtime → Run all)</li>
+                  <li>Wait for training to complete</li>
+                  <li>When training is done, click "Import Trained Model" below</li>
+                </ol>
+              </AlertDescription>
+            </Alert>
+
+            <div className="flex gap-2">
+              <Button 
+                className="w-full"
+                onClick={() => {
+                  if (colabNotebookUrl) {
+                    window.open(colabNotebookUrl, '_blank');
+                  }
+                }}
+              >
+                Open Google Colab Notebook
+                <ExternalLink className="ml-2 h-4 w-4" />
+              </Button>
+            </div>
+
+            <div className="flex flex-col mt-4">
+              <Button 
+                variant="default" 
+                onClick={importTrainedModel}
+              >
+                Import Trained Model
+              </Button>
+              <p className="text-xs text-muted-foreground mt-2">
+                Click this after you've run the notebook and the model training is complete.
+              </p>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }

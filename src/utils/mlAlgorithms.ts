@@ -450,3 +450,51 @@ export const analyzeFeatureImportance = (
     importance: Math.random()
   })).sort((a, b) => b.importance - a.importance);
 };
+
+// New interface for Colab notebook generation
+interface ColabNotebookOptions {
+  data: any[];
+  features: string[];
+  targets: string[];
+  algorithm: Algorithm | null;
+  datasetName: string;
+  modelId: string;
+}
+
+// Function to generate a Google Colab notebook for advanced model training
+export const generateColabNotebook = async (options: ColabNotebookOptions): Promise<string> => {
+  try {
+    console.log(`Generating Colab notebook for dataset: ${options.datasetName}`);
+    
+    // Call the Edge Function to generate a Colab notebook
+    const response = await fetch(
+      "https://uysdqwhyhqhamwvzsolw.supabase.co/functions/v1/generate-colab-notebook",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY || ''}`
+        },
+        body: JSON.stringify({
+          data: options.data,
+          features: options.features,
+          targets: options.targets,
+          algorithm: options.algorithm,
+          datasetName: options.datasetName,
+          modelId: options.modelId
+        })
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(`Notebook generation failed: ${errorData.error || 'Unknown error'}`);
+    }
+
+    const result = await response.json();
+    return result.notebookUrl;
+  } catch (error) {
+    console.error("Error generating Colab notebook:", error);
+    throw error;
+  }
+};
