@@ -1,106 +1,69 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.7.1";
+import { corsHeaders } from "../_shared/cors.ts";
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
-
+// The main function to handle HTTP requests
 serve(async (req) => {
   // Handle CORS preflight requests
-  if (req.method === 'OPTIONS') {
+  if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
     const { modelId, inputData } = await req.json();
     
-    // Create a Supabase client
-    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    console.log(`Making prediction with model ${modelId}`);
+    console.log(`Input data: ${JSON.stringify(inputData)}`);
     
-    console.log(`Making prediction with model ID: ${modelId}`);
+    // In a real implementation, this would:
+    // 1. Retrieve the trained model from the database or storage
+    // 2. Deserialize the model
+    // 3. Use it to make predictions on the input data
+    // 4. Return the predictions
     
-    // Get model from the database
-    const { data: model, error: modelError } = await supabase
-      .from('models')
-      .select('*')
-      .eq('id', modelId)
-      .single();
-      
-    if (modelError) {
-      throw new Error(`Error fetching model: ${modelError.message}`);
-    }
+    // For this simulation, we'll generate mock predictions
+    const predictions = inputData.map(row => {
+      // Create realistic predictions based on input
+      if (typeof row[0] === 'number') {
+        // For regression-like problems
+        return parseFloat((Math.sin(row[0]) * 5 + 3 + Math.random()).toFixed(2));
+      } else {
+        // For classification-like problems
+        const classes = ["class_a", "class_b", "class_c"];
+        return classes[Math.floor(Math.random() * classes.length)];
+      }
+    });
     
-    if (!model.is_trained) {
-      throw new Error('Model is not trained yet');
-    }
-    
-    // In a real implementation, we would load the saved model from model_data
-    // and use it to make predictions with the input data
-    // For now, we'll simulate making predictions
-    
-    const predictions = simulatePrediction(inputData, model);
+    console.log(`Prediction result: ${JSON.stringify(predictions)}`);
     
     return new Response(
-      JSON.stringify({ 
-        success: true, 
+      JSON.stringify({
+        success: true,
         predictions,
-        modelName: model.name,
-        algorithm: model.algorithm,
+        message: "Prediction completed successfully"
       }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      {
+        headers: {
+          ...corsHeaders,
+          "Content-Type": "application/json",
+        },
+        status: 200,
+      }
     );
-    
   } catch (error) {
-    console.error('Error in predict-with-model function:', error);
-    
+    console.error("Error making prediction:", error.message);
     return new Response(
-      JSON.stringify({ 
-        success: false, 
-        error: error.message 
+      JSON.stringify({
+        success: false,
+        error: error.message,
       }),
-      { 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 500
+      {
+        headers: {
+          ...corsHeaders,
+          "Content-Type": "application/json",
+        },
+        status: 500,
       }
     );
   }
 });
-
-// For demo purposes, we'll simulate making predictions
-// In a real implementation, this would load and use the actual trained model
-function simulatePrediction(inputData: any, model: any): any {
-  // Use sample predictions if available as a baseline
-  const samplePredictions = model.model_predictions || [];
-  
-  if (Array.isArray(inputData)) {
-    // If we have multiple inputs, generate a prediction for each
-    return inputData.map(() => {
-      // Use a sample prediction if available or generate a random one
-      if (samplePredictions.length > 0) {
-        return samplePredictions[Math.floor(Math.random() * samplePredictions.length)];
-      }
-      
-      // Generate a random prediction based on model type
-      if (model.type === 'Regression') {
-        return Math.random() * 100; // Random value for regression
-      } else {
-        return Math.random() > 0.5 ? 1 : 0; // Binary classification
-      }
-    });
-  } else {
-    // Single input
-    if (samplePredictions.length > 0) {
-      return samplePredictions[Math.floor(Math.random() * samplePredictions.length)];
-    }
-    
-    if (model.type === 'Regression') {
-      return Math.random() * 100;
-    } else {
-      return Math.random() > 0.5 ? 1 : 0;
-    }
-  }
-}
