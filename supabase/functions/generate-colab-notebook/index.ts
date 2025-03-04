@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { corsHeaders } from "../_shared/cors.ts";
 
@@ -27,17 +26,14 @@ serve(async (req) => {
       learningRate
     );
     
-    // In a production system, we would upload this to Google Drive or a Cloud Storage service
-    // For now, we'll simulate this by returning a direct Colab URL with a template
-    const colabUrl = `https://colab.research.google.com/github/googlecolab/colabtools/blob/main/notebooks/colab-github-demo.ipynb#scrollTo=8QAWNjizy_3O`;
-    
-    // In a real implementation, you would generate a unique URL for each notebook
+    // In a production system, we would create a real Colab notebook URL
+    // For this demo, we'll return the notebook content and instructions for manual import
     
     return new Response(
       JSON.stringify({
         success: true,
-        notebookUrl: colabUrl,
-        message: "Notebook generated successfully"
+        notebookContent: notebookContent,
+        message: "Notebook generated successfully. Use the 'Download Notebook' button to save and upload to Colab."
       }),
       {
         headers: {

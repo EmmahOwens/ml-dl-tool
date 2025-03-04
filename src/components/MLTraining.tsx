@@ -17,10 +17,11 @@ import {
   getModelTypeForAlgorithm,
   generateColabNotebook
 } from "@/utils/mlAlgorithms";
-import { Check, Info, Sparkles, Plus, X, Database, AlertTriangle, ExternalLink } from "lucide-react";
+import { Check, Info, Sparkles, Plus, X, Database, AlertTriangle, ExternalLink, Download } from "lucide-react";
 import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { ModelDisclaimer } from "./ModelDisclaimer";
 
 interface MLTrainingProps {
   data: any[];
@@ -55,6 +56,7 @@ export function MLTraining({
   const [colabNotebookUrl, setColabNotebookUrl] = useState<string | null>(null);
   const [colabModelId, setColabModelId] = useState<string | null>(null);
   const [isExportingToColab, setIsExportingToColab] = useState(false);
+  const [colabNotebookContent, setColabNotebookContent] = useState<string | null>(null);
 
   useEffect(() => {
     const LARGE_DATASET_THRESHOLD = 10000;
@@ -204,7 +206,7 @@ export function MLTraining({
       const tempModelId = `temp-${Date.now()}`;
       setColabModelId(tempModelId);
       
-      const colabUrl = await generateColabNotebook({
+      const result = await generateColabNotebook({
         data,
         features,
         targets: selectedTargets,
@@ -213,7 +215,8 @@ export function MLTraining({
         modelId: tempModelId
       });
       
-      setColabNotebookUrl(colabUrl);
+      setColabNotebookContent(result.notebookContent);
+      setColabNotebookUrl(null);
       setShowColabDialog(true);
       toast.success("Google Colab notebook generated successfully");
     } catch (error) {
@@ -221,6 +224,29 @@ export function MLTraining({
       toast.error("Failed to generate Google Colab notebook");
     } finally {
       setIsExportingToColab(false);
+    }
+  };
+
+  const downloadNotebook = () => {
+    if (!colabNotebookContent) return;
+    
+    try {
+      const blob = new Blob([colabNotebookContent], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${datasetName.replace(/\s+/g, '_')}_notebook.ipynb`;
+      document.body.appendChild(a);
+      a.click();
+      
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      toast.success("Notebook downloaded successfully");
+    } catch (error) {
+      console.error("Error downloading notebook:", error);
+      toast.error("Failed to download notebook");
     }
   };
 
@@ -309,6 +335,8 @@ export function MLTraining({
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        <ModelDisclaimer />
+        
         {isLargeDataset && (
           <Alert className="mb-4">
             <Database className="h-4 w-4" />
@@ -519,7 +547,9 @@ export function MLTraining({
               <AlertDescription>
                 <p>Follow these steps to train your model with Google Colab:</p>
                 <ol className="list-decimal ml-5 mt-2 space-y-1">
-                  <li>Click the button below to open the notebook in Google Colab</li>
+                  <li>Click the "Download Notebook" button below</li>
+                  <li>Go to <a href="https://colab.research.google.com" target="_blank" rel="noopener noreferrer" className="text-blue-500 underline">Google Colab</a></li>
+                  <li>Upload the notebook (File → Upload notebook)</li>
                   <li>Run all cells in the notebook (Runtime → Run all)</li>
                   <li>Wait for training to complete</li>
                   <li>When training is done, click "Import Trained Model" below</li>
@@ -530,14 +560,11 @@ export function MLTraining({
             <div className="flex gap-2">
               <Button 
                 className="w-full"
-                onClick={() => {
-                  if (colabNotebookUrl) {
-                    window.open(colabNotebookUrl, '_blank');
-                  }
-                }}
+                onClick={downloadNotebook}
+                disabled={!colabNotebookContent}
               >
-                Open Google Colab Notebook
-                <ExternalLink className="ml-2 h-4 w-4" />
+                Download Notebook
+                <Download className="ml-2 h-4 w-4" />
               </Button>
             </div>
 

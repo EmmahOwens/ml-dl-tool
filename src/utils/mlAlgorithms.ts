@@ -462,7 +462,7 @@ interface ColabNotebookOptions {
 }
 
 // Function to generate a Google Colab notebook for advanced model training
-export const generateColabNotebook = async (options: ColabNotebookOptions): Promise<string> => {
+export const generateColabNotebook = async (options: ColabNotebookOptions): Promise<any> => {
   try {
     console.log(`Generating Colab notebook for dataset: ${options.datasetName}`);
     
@@ -492,7 +492,7 @@ export const generateColabNotebook = async (options: ColabNotebookOptions): Prom
     }
 
     const result = await response.json();
-    return result.notebookUrl;
+    return result;
   } catch (error) {
     console.error("Error generating Colab notebook:", error);
     throw error;
