@@ -12,8 +12,11 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { trainNeuralNetwork, optimizeNeuralNetwork } from "@/utils/dlNetworks";
 import { NeuralNetworkLayer, useModels } from "@/context/ModelContext";
-import { Check, Info, Plus, X } from "lucide-react";
+import { Check, Info, Plus, X, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { ModelDisclaimer } from "./ModelDisclaimer";
 
 interface DLTrainingProps {
   data: any[];
@@ -39,6 +42,12 @@ export function DLTraining({ data, features, target, datasetName, onTrainingComp
   ]);
   const [epochs, setEpochs] = useState(100);
   const [learningRate, setLearningRate] = useState(0.001);
+
+  // Colab integration
+  const [showColabDialog, setShowColabDialog] = useState(false);
+  const [colabNotebookUrl, setColabNotebookUrl] = useState<string | null>(null);
+  const [colabModelId, setColabModelId] = useState<string | null>(null);
+  const [isExportingToColab, setIsExportingToColab] = useState(false);
 
   // Update currentTarget when available features change
   useEffect(() => {
@@ -92,6 +101,113 @@ export function DLTraining({ data, features, target, datasetName, onTrainingComp
       [field]: value
     };
     setNetworkArchitecture(newArchitecture);
+  };
+
+  const exportToColab = async () => {
+    try {
+      setIsExportingToColab(true);
+      
+      const tempModelId = `temp-dl-${Date.now()}`;
+      setColabModelId(tempModelId);
+      
+      // Call the edge function to generate the Colab notebook
+      const response = await fetch(
+        "https://uysdqwhyhqhamwvzsolw.supabase.co/functions/v1/generate-colab-notebook",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY || ''}`
+          },
+          body: JSON.stringify({
+            data,
+            features,
+            targets: selectedTargets,
+            algorithm: "Neural Network",
+            datasetName,
+            modelId: tempModelId,
+            neuralNetworkArchitecture: isCustom ? networkArchitecture : null,
+            epochs: epochs,
+            learningRate: learningRate
+          })
+        }
+      );
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(`Failed to generate notebook: ${errorData.error || 'Unknown error'}`);
+      }
+      
+      const result = await response.json();
+      
+      setColabNotebookUrl(result.notebookUrl);
+      setShowColabDialog(true);
+      toast.success("Google Colab notebook generated successfully");
+    } catch (error) {
+      console.error("Error generating Colab notebook:", error);
+      toast.error("Failed to generate Google Colab notebook");
+    } finally {
+      setIsExportingToColab(false);
+    }
+  };
+
+  const importTrainedModel = async () => {
+    if (!colabModelId) return;
+    
+    try {
+      toast.info("Importing trained model from Google Colab...");
+      
+      const response = await fetch(
+        "https://uysdqwhyhqhamwvzsolw.supabase.co/functions/v1/import-trained-model",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY || ''}`
+          },
+          body: JSON.stringify({
+            modelId: colabModelId,
+            datasetName
+          })
+        }
+      );
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(`Import failed: ${errorData.error || 'Unknown error'}`);
+      }
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        // Add the imported model to the storage
+        await addModel({
+          name: `Neural Network (Colab) - ${selectedTargets.join(", ")}`,
+          type: "DL",
+          algorithm: "Neural Network",
+          accuracy: result.accuracy,
+          datasetName,
+          parameters: {
+            importedFromColab: true,
+            trainingDate: new Date().toISOString()
+          },
+          neuralNetworkArchitecture: isCustom ? networkArchitecture : [
+            { neurons: 64, activation: "ReLU", dropout: 0.2 },
+            { neurons: 32, activation: "ReLU", dropout: 0.1 }
+          ],
+          targets: selectedTargets
+        });
+        
+        toast.success("Model imported successfully!");
+        setShowColabDialog(false);
+        onTrainingComplete();
+      } else {
+        throw new Error(result.message || "Import failed");
+      }
+    } catch (error) {
+      console.error("Error importing model:", error);
+      toast.error(`Failed to import model: ${error.message}`);
+    }
   };
 
   const trainModel = async () => {
@@ -168,8 +284,6 @@ export function DLTraining({ data, features, target, datasetName, onTrainingComp
     }
   };
 
-  const availableTargets = features.filter(f => !selectedTargets.includes(f));
-
   const getAccuracyColor = (accuracy: number) => {
     if (accuracy >= 0.9) return "bg-green-500";
     if (accuracy >= 0.8) return "bg-emerald-500";
@@ -177,6 +291,8 @@ export function DLTraining({ data, features, target, datasetName, onTrainingComp
     if (accuracy >= 0.6) return "bg-yellow-500";
     return "bg-red-500";
   };
+
+  const availableTargets = features.filter(f => !selectedTargets.includes(f));
 
   return (
     <Card>
@@ -187,6 +303,8 @@ export function DLTraining({ data, features, target, datasetName, onTrainingComp
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        <ModelDisclaimer />
+        
         <div className="flex items-center space-x-2">
           <Switch
             id="custom-mode"
@@ -404,17 +522,81 @@ export function DLTraining({ data, features, target, datasetName, onTrainingComp
                   : "Auto-optimized network architecture"}
               </span>
             </div>
-            <Button 
-              onClick={trainModel} 
-              disabled={isTraining}
-              className="sm:w-auto w-full"
-            >
-              {isTraining ? "Training..." : "Train Neural Network"}
-              {!isTraining && <Check className="ml-2 h-4 w-4" />}
-            </Button>
+            <div className="flex gap-2 sm:w-auto w-full">
+              <Button
+                variant="outline"
+                onClick={exportToColab}
+                disabled={isTraining || isExportingToColab}
+                className="sm:w-auto w-full"
+              >
+                {isExportingToColab ? "Generating..." : "Use Google Colab"}
+                <ExternalLink className="ml-2 h-4 w-4" />
+              </Button>
+              <Button 
+                onClick={trainModel} 
+                disabled={isTraining}
+                className="sm:w-auto w-full"
+              >
+                {isTraining ? "Training..." : "Train Neural Network"}
+                {!isTraining && <Check className="ml-2 h-4 w-4" />}
+              </Button>
+            </div>
           </div>
         </div>
       </CardFooter>
+
+      <Dialog open={showColabDialog} onOpenChange={setShowColabDialog}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Train with Google Colab</DialogTitle>
+            <DialogDescription>
+              We've generated a Google Colab notebook for advanced neural network training with 
+              full access to TensorFlow, Keras, and other deep learning libraries.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <Alert>
+              <Info className="h-4 w-4" />
+              <AlertDescription>
+                <p>Follow these steps to train your neural network with Google Colab:</p>
+                <ol className="list-decimal ml-5 mt-2 space-y-1">
+                  <li>Click the button below to open the notebook in Google Colab</li>
+                  <li>Run all cells in the notebook (Runtime → Run all)</li>
+                  <li>Wait for training to complete</li>
+                  <li>When training is done, click "Import Trained Model" below</li>
+                </ol>
+              </AlertDescription>
+            </Alert>
+
+            <div className="flex gap-2">
+              <Button 
+                className="w-full"
+                onClick={() => {
+                  if (colabNotebookUrl) {
+                    window.open(colabNotebookUrl, '_blank');
+                  }
+                }}
+              >
+                Open Google Colab Notebook
+                <ExternalLink className="ml-2 h-4 w-4" />
+              </Button>
+            </div>
+
+            <div className="flex flex-col mt-4">
+              <Button 
+                variant="default" 
+                onClick={importTrainedModel}
+              >
+                Import Trained Model
+              </Button>
+              <p className="text-xs text-muted-foreground mt-2">
+                Click this after you've run the notebook and the model training is complete.
+              </p>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }

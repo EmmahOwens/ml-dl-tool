@@ -9,23 +9,25 @@ serve(async (req) => {
   }
 
   try {
-    const { data, features, targets, algorithm, datasetName, modelId } = await req.json();
+    const { data, features, targets, algorithm, datasetName, modelId, neuralNetworkArchitecture, epochs, learningRate } = await req.json();
     
     console.log(`Generating Colab notebook for ${datasetName}`);
     console.log(`Features: ${features.length}, Targets: ${targets.length}, Rows: ${data.length}`);
     
     // Create notebook content
-    const notebookContent = generateColabNotebookContent(data, features, targets, algorithm, datasetName, modelId);
+    const notebookContent = generateColabNotebookContent(
+      data, 
+      features, 
+      targets, 
+      algorithm, 
+      datasetName, 
+      modelId, 
+      neuralNetworkArchitecture, 
+      epochs, 
+      learningRate
+    );
     
     // In a production system, we would upload this to Google Drive or a Cloud Storage service
-    // For this example, we'll use gist.github.com as a simple way to share code
-    
-    // For demo purposes, we'll host the notebook using an online service
-    // In a real implementation, you would:
-    // 1. Create a temporary file
-    // 2. Upload it to Google Drive or Cloud Storage
-    // 3. Generate a sharing link
-    
     // For now, we'll simulate this by returning a direct Colab URL with a template
     const colabUrl = `https://colab.research.google.com/github/googlecolab/colabtools/blob/main/notebooks/colab-github-demo.ipynb#scrollTo=8QAWNjizy_3O`;
     
@@ -64,16 +66,60 @@ serve(async (req) => {
 });
 
 // Helper function to generate notebook content
-function generateColabNotebookContent(data, features, targets, algorithm, datasetName, modelId) {
+function generateColabNotebookContent(
+  data, 
+  features, 
+  targets, 
+  algorithm, 
+  datasetName, 
+  modelId,
+  neuralNetworkArchitecture = null,
+  epochs = 100,
+  learningRate = 0.001
+) {
+  const isNeuralNetwork = algorithm === "Neural Network";
+  
+  let architectureCode = "";
+  
+  if (isNeuralNetwork && neuralNetworkArchitecture) {
+    // Generate code for custom architecture
+    architectureCode = `
+# Using custom neural network architecture
+nn_model = Sequential([
+    ${neuralNetworkArchitecture.map((layer, index) => 
+      `Dense(${layer.neurons}, activation='${layer.activation.toLowerCase()}', ${index === 0 ? 'input_shape=(X_train_scaled.shape[1],)' : ''}),
+      ${layer.dropout > 0 ? `Dropout(${layer.dropout}),` : ''}`
+    ).join('\n    ')}
+    Dense(1, activation='sigmoid' if len(np.unique(y)) <= 2 else 'softmax')
+])
+
+print("Using custom architecture with ${neuralNetworkArchitecture.length} hidden layers")
+`;
+  } else {
+    // Generate code for auto architecture
+    architectureCode = `
+# Auto-generated neural network architecture
+nn_model = Sequential([
+    Dense(64, activation='relu', input_shape=(X_train_scaled.shape[1],)),
+    Dropout(0.2),
+    Dense(32, activation='relu'),
+    Dropout(0.1),
+    Dense(1, activation='sigmoid' if len(np.unique(y)) <= 2 else 'softmax')
+])
+
+print("Using auto-generated architecture")
+`;
+  }
+
   const notebook = {
     "cells": [
       {
         "cell_type": "markdown",
         "metadata": {},
         "source": [
-          "# ML Training Notebook for " + datasetName,
+          `# ${isNeuralNetwork ? 'Deep Learning' : 'Machine Learning'} Training Notebook for ${datasetName}`,
           "\n",
-          "This notebook was automatically generated for training machine learning models on your dataset.",
+          `This notebook was automatically generated for training ${isNeuralNetwork ? 'neural networks' : 'machine learning models'} on your dataset.`,
           "\n",
           "Follow these steps to train your model:",
           "\n",
@@ -138,12 +184,12 @@ function generateColabNotebookContent(data, features, targets, algorithm, datase
         "metadata": {},
         "source": [
           "# Dataset Information\n",
-          "print(f\"Dataset: {'" + datasetName + "'}\") \n",
-          "print(f\"Features: {" + JSON.stringify(features) + "}\")\n",
-          "print(f\"Target(s): {" + JSON.stringify(targets) + "}\")\n",
+          `print(f"Dataset: {'${datasetName}'}")`,
+          `print(f"Features: {${JSON.stringify(features)}}")`,
+          `print(f"Target(s): {${JSON.stringify(targets)}}")`,
           "\n",
           "# Load the data\n",
-          "data = " + JSON.stringify(data) + "\n",
+          `data = ${JSON.stringify(data)}`,
           "\n",
           "# Convert to DataFrame\n",
           "df = pd.DataFrame(data)\n",
@@ -159,8 +205,8 @@ function generateColabNotebookContent(data, features, targets, algorithm, datase
         "metadata": {},
         "source": [
           "# Prepare features and target\n",
-          "X = df[" + JSON.stringify(features) + "]\n",
-          "y = df['" + targets[0] + "']\n",
+          `X = df[${JSON.stringify(features)}]`,
+          `y = df['${targets[0]}']`,
           "\n",
           "# Split the data\n",
           "X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)\n",
@@ -206,132 +252,23 @@ function generateColabNotebookContent(data, features, targets, algorithm, datase
         "cell_type": "markdown",
         "metadata": {},
         "source": [
-          "## Train and Evaluate Models"
+          `## ${isNeuralNetwork ? 'Neural Network Training' : 'Train and Evaluate Models'}`
         ]
       },
       {
         "cell_type": "code",
         "execution_count": null,
         "metadata": {},
-        "source": [
-          algorithm ? 
-          `# Train ${algorithm} model\n` +
-          `model = ${getModelInitCode(algorithm)}\n` +
-          `model.fit(X_train_scaled, y_train)\n` +
-          "\n" +
-          `# Evaluate the model\n` +
-          `y_pred = model.predict(X_test_scaled)\n` +
-          "\n" +
-          `# Calculate accuracy\n` +
-          `accuracy = model.score(X_test_scaled, y_test)\n` +
-          `print(f"Model: ${algorithm}")\n` +
-          `print(f"Accuracy: {accuracy:.4f}")\n` +
-          "\n" +
-          `# Additional metrics\n` +
-          `try:\n` +
-          `    print("\\nClassification Report:")\n` +
-          `    print(classification_report(y_test, y_pred))\n` +
-          `    \n` +
-          `    print("\\nConfusion Matrix:")\n` +
-          `    cm = confusion_matrix(y_test, y_pred)\n` +
-          `    plt.figure(figsize=(8, 6))\n` +
-          `    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues')\n` +
-          `    plt.xlabel('Predicted')\n` +
-          `    plt.ylabel('Actual')\n` +
-          `    plt.title('Confusion Matrix')\n` +
-          `    plt.show()\n` +
-          `except Exception as e:\n` +
-          `    print(f"Could not generate classification metrics: {e}")\n` +
-          `    print("\\nRegression Metrics:")\n` +
-          `    mse = mean_squared_error(y_test, y_pred)\n` +
-          `    print(f"Mean Squared Error: {mse:.4f}")\n` +
-          `    print(f"Root Mean Squared Error: {np.sqrt(mse):.4f}")\n`
-          :
-          `# Train and evaluate multiple models\n` +
-          `models = {\n` +
-          `    'Random Forest': RandomForestClassifier(n_estimators=100, random_state=42),\n` +
-          `    'Gradient Boosting': GradientBoostingClassifier(random_state=42),\n` +
-          `    'Logistic Regression': LogisticRegression(max_iter=1000, random_state=42),\n` +
-          `    'SVM': SVC(probability=True, random_state=42),\n` +
-          `    'Decision Tree': DecisionTreeClassifier(random_state=42)\n` +
-          `}\n` +
-          "\n" +
-          `# Dictionary to store results\n` +
-          `results = {}\n` +
-          "\n" +
-          `# Train and evaluate each model\n` +
-          `for name, model in models.items():\n` +
-          `    print(f"\\nTraining {name}...")\n` +
-          `    model.fit(X_train_scaled, y_train)\n` +
-          `    \n` +
-          `    # Make predictions\n` +
-          `    y_pred = model.predict(X_test_scaled)\n` +
-          `    \n` +
-          `    # Calculate accuracy\n` +
-          `    accuracy = accuracy_score(y_test, y_pred)\n` +
-          `    results[name] = accuracy\n` +
-          `    \n` +
-          `    print(f"{name} Accuracy: {accuracy:.4f}")\n` +
-          "\n" +
-          `# Find the best model\n` +
-          `best_model_name = max(results, key=results.get)\n` +
-          `best_model = models[best_model_name]\n` +
-          `best_accuracy = results[best_model_name]\n` +
-          "\n" +
-          `print(f"\\nBest Model: {best_model_name} with accuracy: {best_accuracy:.4f}")\n` +
-          `print("\\nDetails for the best model:")\n` +
-          `y_pred = best_model.predict(X_test_scaled)\n` +
-          "\n" +
-          `try:\n` +
-          `    print("\\nClassification Report:")\n` +
-          `    print(classification_report(y_test, y_pred))\n` +
-          `    \n` +
-          `    print("\\nConfusion Matrix:")\n` +
-          `    cm = confusion_matrix(y_test, y_pred)\n` +
-          `    plt.figure(figsize=(8, 6))\n` +
-          `    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues')\n` +
-          `    plt.xlabel('Predicted')\n` +
-          `    plt.ylabel('Actual')\n` +
-          `    plt.title('Confusion Matrix')\n` +
-          `    plt.show()\n` +
-          `except Exception as e:\n` +
-          `    print(f"Could not generate classification metrics: {e}")\n` +
-          `    print("\\nRegression Metrics:")\n` +
-          `    mse = mean_squared_error(y_test, y_pred)\n` +
-          `    print(f"Mean Squared Error: {mse:.4f}")\n` +
-          `    print(f"Root Mean Squared Error: {np.sqrt(mse):.4f}")\n` +
-          "\n" +
-          `# Set the final model to the best model\n` +
-          `model = best_model\n`
-        ]
-      },
-      {
-        "cell_type": "markdown",
-        "metadata": {},
-        "source": [
-          "## Neural Network Model (Deep Learning)"
-        ]
-      },
-      {
-        "cell_type": "code",
-        "execution_count": null,
-        "metadata": {},
-        "source": [
+        "source": isNeuralNetwork ? [
           "# Train a neural network model\n",
           "print(\"Training Neural Network...\")\n",
           "\n",
           "# Define the model architecture\n",
-          "nn_model = Sequential([\n",
-          "    Dense(64, activation='relu', input_shape=(X_train_scaled.shape[1],)),\n",
-          "    Dropout(0.2),\n",
-          "    Dense(32, activation='relu'),\n",
-          "    Dropout(0.2),\n",
-          "    Dense(1, activation='sigmoid' if len(np.unique(y)) <= 2 else 'softmax')\n",
-          "])\n",
+          architectureCode,
           "\n",
-          "# Compile the model\n",
+          "# Compile the model with specified parameters\n",
           "nn_model.compile(\n",
-          "    optimizer='adam',\n",
+          `    optimizer=tf.keras.optimizers.Adam(learning_rate=${learningRate}),`,
           "    loss='binary_crossentropy' if len(np.unique(y)) <= 2 else 'sparse_categorical_crossentropy',\n",
           "    metrics=['accuracy']\n",
           ")\n",
@@ -339,12 +276,20 @@ function generateColabNotebookContent(data, features, targets, algorithm, datase
           "# Display model summary\n",
           "nn_model.summary()\n",
           "\n",
+          "# Early stopping to prevent overfitting\n",
+          "early_stopping = tf.keras.callbacks.EarlyStopping(\n",
+          "    monitor='val_loss',\n",
+          "    patience=10,\n",
+          "    restore_best_weights=True\n",
+          ")\n",
+          "\n",
           "# Train the model\n",
           "history = nn_model.fit(\n",
           "    X_train_scaled, y_train,\n",
-          "    epochs=50,\n",
+          `    epochs=${epochs},`,
           "    batch_size=32,\n",
           "    validation_split=0.2,\n",
+          "    callbacks=[early_stopping],\n",
           "    verbose=1\n",
           ")\n",
           "\n",
@@ -370,39 +315,101 @@ function generateColabNotebookContent(data, features, targets, algorithm, datase
           "plt.xlabel('Epoch')\n",
           "plt.legend(['Train', 'Validation'], loc='upper right')\n",
           "plt.tight_layout()\n",
-          "plt.show()"
+          "plt.show()\n",
+          "\n",
+          "# Additional evaluation\n",
+          "y_pred_proba = nn_model.predict(X_test_scaled)\n",
+          "y_pred = (y_pred_proba > 0.5).astype(int) if len(np.unique(y)) <= 2 else np.argmax(y_pred_proba, axis=1)\n",
+          "\n",
+          "try:\n",
+          "    print(\"\\nClassification Report:\")\n",
+          "    print(classification_report(y_test, y_pred))\n",
+          "    \n",
+          "    print(\"\\nConfusion Matrix:\")\n",
+          "    cm = confusion_matrix(y_test, y_pred)\n",
+          "    plt.figure(figsize=(8, 6))\n",
+          "    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues')\n",
+          "    plt.xlabel('Predicted')\n",
+          "    plt.ylabel('Actual')\n",
+          "    plt.title('Confusion Matrix')\n",
+          "    plt.show()\n",
+          "except Exception as e:\n",
+          "    print(f\"Could not generate classification metrics: {e}\")\n",
+          "    print(\"\\nRegression Metrics:\")\n",
+          "    mse = mean_squared_error(y_test, y_pred)\n",
+          "    print(f\"Mean Squared Error: {mse:.4f}\")\n",
+          "    print(f\"Root Mean Squared Error: {np.sqrt(mse):.4f}\")\n",
+          "\n",
+          "# Final model variable for saving\n",
+          "final_model = nn_model\n",
+          "final_model_type = 'nn'\n",
+          "final_accuracy = nn_accuracy"
+        ] : [
+          "# Train and evaluate multiple ML models\n",
+          "models = {\n",
+          "    'Random Forest': RandomForestClassifier(n_estimators=100, random_state=42),\n",
+          "    'Gradient Boosting': GradientBoostingClassifier(random_state=42),\n",
+          "    'Logistic Regression': LogisticRegression(max_iter=1000, random_state=42),\n",
+          "    'SVM': SVC(probability=True, random_state=42),\n",
+          "    'Decision Tree': DecisionTreeClassifier(random_state=42)\n",
+          "}\n",
+          "\n",
+          "# Dictionary to store results\n",
+          "results = {}\n",
+          "\n",
+          "# Train and evaluate each model\n",
+          "for name, model in models.items():\n",
+          "    print(f\"\\nTraining {name}...\")\n",
+          "    model.fit(X_train_scaled, y_train)\n",
+          "    \n",
+          "    # Make predictions\n",
+          "    y_pred = model.predict(X_test_scaled)\n",
+          "    \n",
+          "    # Calculate accuracy\n",
+          "    accuracy = accuracy_score(y_test, y_pred)\n",
+          "    results[name] = accuracy\n",
+          "    \n",
+          "    print(f\"{name} Accuracy: {accuracy:.4f}\")\n",
+          "\n",
+          "# Find the best model\n",
+          "best_model_name = max(results, key=results.get)\n",
+          "best_model = models[best_model_name]\n",
+          "best_accuracy = results[best_model_name]\n",
+          "\n",
+          "print(f\"\\nBest Model: {best_model_name} with accuracy: {best_accuracy:.4f}\")\n",
+          "print(\"\\nDetails for the best model:\")\n",
+          "y_pred = best_model.predict(X_test_scaled)\n",
+          "\n",
+          "try:\n",
+          "    print(\"\\nClassification Report:\")\n",
+          "    print(classification_report(y_test, y_pred))\n",
+          "    \n",
+          "    print(\"\\nConfusion Matrix:\")\n",
+          "    cm = confusion_matrix(y_test, y_pred)\n",
+          "    plt.figure(figsize=(8, 6))\n",
+          "    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues')\n",
+          "    plt.xlabel('Predicted')\n",
+          "    plt.ylabel('Actual')\n",
+          "    plt.title('Confusion Matrix')\n",
+          "    plt.show()\n",
+          "except Exception as e:\n",
+          "    print(f\"Could not generate classification metrics: {e}\")\n",
+          "    print(\"\\nRegression Metrics:\")\n",
+          "    mse = mean_squared_error(y_test, y_pred)\n",
+          "    print(f\"Mean Squared Error: {mse:.4f}\")\n",
+          "    print(f\"Root Mean Squared Error: {np.sqrt(mse):.4f}\")\n",
+          "\n",
+          "# Set the final model variables for saving\n",
+          "final_model = best_model\n",
+          "final_model_type = 'traditional'\n",
+          "final_accuracy = best_accuracy"
         ]
       },
       {
         "cell_type": "markdown",
         "metadata": {},
         "source": [
-          "## Compare All Models and Save the Best"
-        ]
-      },
-      {
-        "cell_type": "code",
-        "execution_count": null,
-        "metadata": {},
-        "source": [
-          "# Compare neural network with the best traditional model\n",
-          `best_traditional_accuracy = ${algorithm ? 'accuracy' : 'best_accuracy'}\n`,
-          "print(f\"\\nBest Traditional Model Accuracy: {best_traditional_accuracy:.4f}\")\n",
-          "print(f\"Neural Network Accuracy: {nn_accuracy:.4f}\")\n",
-          "\n",
-          "# Determine the final best model\n",
-          "if nn_accuracy > best_traditional_accuracy:\n",
-          "    print(\"\\nNeural Network is the best model\")\n",
-          "    final_model = nn_model\n",
-          "    final_model_type = 'nn'\n",
-          "    final_accuracy = nn_accuracy\n",
-          "else:\n",
-          "    print(f\"\\nBest traditional model is better: ${algorithm || 'best_model_name'}\")\n",
-          "    final_model = model\n",
-          "    final_model_type = 'traditional'\n",
-          "    final_accuracy = best_traditional_accuracy\n",
-          "\n",
-          "print(f\"Final Best Model Accuracy: {final_accuracy:.4f}\")"
+          "## Save the Model"
         ]
       },
       {
@@ -422,40 +429,40 @@ function generateColabNotebookContent(data, features, targets, algorithm, datase
           "\n",
           "# Save the model and metadata\n",
           "model_info = {\n",
-          "    'modelId': '" + modelId + "',\n",
-          "    'datasetName': '" + datasetName + "',\n",
-          "    'features': " + JSON.stringify(features) + ",\n",
-          "    'targets': " + JSON.stringify(targets) + ",\n",
+          `    'modelId': '${modelId}',`,
+          `    'datasetName': '${datasetName}',`,
+          `    'features': ${JSON.stringify(features)},`,
+          `    'targets': ${JSON.stringify(targets)},`,
           "    'accuracy': float(final_accuracy),\n",
           "    'modelType': final_model_type,\n",
-          "    'algorithm': '" + (algorithm || "Auto-selected") + "',\n",
+          `    'algorithm': '${isNeuralNetwork ? "Neural Network" : (algorithm || "Auto-selected")}',`,
           "    'scaler': 'standard_scaler',\n",
           "    'timestamp': pd.Timestamp.now().isoformat()\n",
           "}\n",
           "\n",
           "# Save model info as JSON\n",
-          "with open(f'{save_dir}/{'" + modelId + "'}_info.json', 'w') as f:\n",
+          `with open(f'{save_dir}/{modelId}_info.json', 'w') as f:`,
           "    json.dump(model_info, f)\n",
           "\n",
           "# Save the model based on its type\n",
           "if final_model_type == 'nn':\n",
           "    # Save neural network model\n",
-          "    final_model.save(f'{save_dir}/{'" + modelId + "'}_model')\n",
-          "    print(f\"Neural Network model saved to {save_dir}/{'" + modelId + "'}_model\")\n",
+          `    final_model.save(f'{save_dir}/{modelId}_model')`,
+          `    print(f\"Neural Network model saved to {save_dir}/{modelId}_model\")`,
           "    \n",
           "    # Also save the scaler\n",
-          "    with open(f'{save_dir}/{'" + modelId + "'}_scaler.pkl', 'wb') as f:\n",
+          `    with open(f'{save_dir}/{modelId}_scaler.pkl', 'wb') as f:`,
           "        pickle.dump(scaler, f)\n",
           "else:\n",
           "    # Save traditional ML model with pickle\n",
-          "    with open(f'{save_dir}/{'" + modelId + "'}_model.pkl', 'wb') as f:\n",
+          `    with open(f'{save_dir}/{modelId}_model.pkl', 'wb') as f:`,
           "        pickle.dump(final_model, f)\n",
           "    \n",
           "    # Save the scaler as well\n",
-          "    with open(f'{save_dir}/{'" + modelId + "'}_scaler.pkl', 'wb') as f:\n",
+          `    with open(f'{save_dir}/{modelId}_scaler.pkl', 'wb') as f:`,
           "        pickle.dump(scaler, f)\n",
           "    \n",
-          "    print(f\"Traditional ML model saved to {save_dir}/{'" + modelId + "'}_model.pkl\")\n",
+          `    print(f\"Traditional ML model saved to {save_dir}/{modelId}_model.pkl\")`,
           "\n",
           "print(\"Training complete and model saved! Return to the app to import the model.\")"
         ]
@@ -485,24 +492,4 @@ function generateColabNotebookContent(data, features, targets, algorithm, datase
   };
   
   return JSON.stringify(notebook);
-}
-
-// Helper function to get initialization code for different ML algorithms
-function getModelInitCode(algorithm) {
-  switch (algorithm) {
-    case "Linear Regression":
-      return "LinearRegression()";
-    case "Logistic Regression":
-      return "LogisticRegression(max_iter=1000, random_state=42)";
-    case "Decision Tree":
-      return "DecisionTreeClassifier(random_state=42)";
-    case "Random Forest":
-      return "RandomForestClassifier(n_estimators=100, random_state=42)";
-    case "SVM":
-      return "SVC(probability=True, random_state=42)";
-    case "Gradient Boosting":
-      return "GradientBoostingClassifier(random_state=42)";
-    default:
-      return "RandomForestClassifier(n_estimators=100, random_state=42)";
-  }
 }
