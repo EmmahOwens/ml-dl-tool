@@ -10,6 +10,13 @@ import { Button } from "@/components/ui/button";
 import { ExternalLink } from "lucide-react";
 import { ModelDisclaimer } from "@/components/ModelDisclaimer";
 import { useTheme } from "@/context/ThemeContext";
+import { TrainingProgress } from "@/components/TrainingProgress";
+import { FeatureImportance } from "@/components/FeatureImportance";
+import { HyperparameterTuning } from "@/components/HyperparameterTuning";
+import { ModelVersioning } from "@/components/ModelVersioning";
+import { CrossValidation } from "@/components/CrossValidation";
+import { DataPreprocessing } from "@/components/DataPreprocessing";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const Index = () => {
   const { theme } = useTheme();
@@ -23,6 +30,7 @@ const Index = () => {
   
   const [mlTrainingComplete, setMlTrainingComplete] = useState(false);
   const [dlTrainingComplete, setDlTrainingComplete] = useState(false);
+  const [isTraining, setIsTraining] = useState(false);
 
   const handleDatasetLoad = (
     data: any[],
@@ -43,6 +51,20 @@ const Index = () => {
   const handleDLTrainingComplete = () => {
     setDlTrainingComplete(true);
   };
+  
+  // Sample feature importance data
+  const featureImportanceData = [
+    { name: "age", importance: 0.82 },
+    { name: "income", importance: 0.75 },
+    { name: "credit_score", importance: 0.68 },
+    { name: "account_balance", importance: 0.61 },
+    { name: "num_products", importance: 0.54 },
+    { name: "active_member", importance: 0.47 },
+    { name: "tenure", importance: 0.39 },
+    { name: "country", importance: 0.32 },
+    { name: "gender", importance: 0.25 },
+    { name: "has_card", importance: 0.18 },
+  ];
 
   return (
     <div className={`min-h-screen pb-20 transition-colors duration-300 ${
@@ -88,24 +110,62 @@ const Index = () => {
           {datasetLoaded && datasetInfo && (
             <>
               <AnimatedTransition>
-                <MLTraining
-                  data={datasetInfo.data}
-                  features={datasetInfo.features}
-                  target={datasetInfo.target}
-                  datasetName={datasetInfo.name}
-                  onTrainingComplete={handleMLTrainingComplete}
-                />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <DataPreprocessing />
+                  <TrainingProgress 
+                    modelName={datasetInfo.name}
+                    isTraining={isTraining}
+                    onPause={() => console.log("Training paused")}
+                    onResume={() => console.log("Training resumed")}
+                    onCancel={() => setIsTraining(false)}
+                  />
+                </div>
               </AnimatedTransition>
               
               <AnimatedTransition>
-                <DLTraining
-                  data={datasetInfo.data}
-                  features={datasetInfo.features}
-                  target={datasetInfo.target}
-                  datasetName={datasetInfo.name}
-                  onTrainingComplete={handleDLTrainingComplete}
-                />
+                <Tabs defaultValue="ml" className="mt-2">
+                  <TabsList className="mb-4">
+                    <TabsTrigger value="ml">Machine Learning</TabsTrigger>
+                    <TabsTrigger value="dl">Deep Learning</TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="ml">
+                    <div className="grid gap-6">
+                      <MLTraining
+                        data={datasetInfo.data}
+                        features={datasetInfo.features}
+                        target={datasetInfo.target}
+                        datasetName={datasetInfo.name}
+                        onTrainingComplete={handleMLTrainingComplete}
+                      />
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <HyperparameterTuning />
+                        <CrossValidation />
+                      </div>
+                    </div>
+                  </TabsContent>
+                  <TabsContent value="dl">
+                    <div className="grid gap-6">
+                      <DLTraining
+                        data={datasetInfo.data}
+                        features={datasetInfo.features}
+                        target={datasetInfo.target}
+                        datasetName={datasetInfo.name}
+                        onTrainingComplete={handleDLTrainingComplete}
+                      />
+                    </div>
+                  </TabsContent>
+                </Tabs>
               </AnimatedTransition>
+              
+              {(mlTrainingComplete || dlTrainingComplete) && (
+                <AnimatedTransition>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <FeatureImportance features={featureImportanceData} />
+                    <ModelVersioning />
+                  </div>
+                </AnimatedTransition>
+              )}
             </>
           )}
           

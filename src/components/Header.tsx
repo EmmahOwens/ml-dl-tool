@@ -1,7 +1,8 @@
 
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useTheme } from "@/context/ThemeContext";
-import { Brain } from "lucide-react";
+import { Brain, Play } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 export function Header() {
   const { theme } = useTheme();
@@ -31,6 +32,14 @@ export function Header() {
         </div>
         
         <div className="flex items-center gap-4">
+          <Button 
+            size="sm" 
+            className="flex items-center gap-1 hidden sm:flex"
+            onClick={() => console.log("Start Training")}
+          >
+            <Play className="h-4 w-4" />
+            Start Training
+          </Button>
           <ThemeToggle />
         </div>
       </div>
