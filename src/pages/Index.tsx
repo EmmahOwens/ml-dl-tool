@@ -46,10 +46,16 @@ const Index = () => {
 
   const handleMLTrainingComplete = () => {
     setMlTrainingComplete(true);
+    setIsTraining(false);
   };
 
   const handleDLTrainingComplete = () => {
     setDlTrainingComplete(true);
+    setIsTraining(false);
+  };
+  
+  const handleStartTraining = () => {
+    setIsTraining(true);
   };
   
   // Sample feature importance data
@@ -115,8 +121,8 @@ const Index = () => {
                   <TrainingProgress 
                     modelName={datasetInfo.name}
                     isTraining={isTraining}
-                    onPause={() => console.log("Training paused")}
-                    onResume={() => console.log("Training resumed")}
+                    onPause={() => setIsTraining(false)}
+                    onResume={() => setIsTraining(true)}
                     onCancel={() => setIsTraining(false)}
                   />
                 </div>
@@ -136,6 +142,7 @@ const Index = () => {
                         target={datasetInfo.target}
                         datasetName={datasetInfo.name}
                         onTrainingComplete={handleMLTrainingComplete}
+                        onStartTraining={handleStartTraining}
                       />
                       
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -152,6 +159,7 @@ const Index = () => {
                         target={datasetInfo.target}
                         datasetName={datasetInfo.name}
                         onTrainingComplete={handleDLTrainingComplete}
+                        onStartTraining={handleStartTraining}
                       />
                     </div>
                   </TabsContent>

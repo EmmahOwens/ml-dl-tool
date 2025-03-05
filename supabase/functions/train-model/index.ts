@@ -52,7 +52,15 @@ serve(async (req) => {
       const output = new TextDecoder().decode(stdout);
       console.log(`Python output: ${output}`);
       
-      const result = JSON.parse(output);
+      let result;
+      try {
+        result = JSON.parse(output);
+      } catch (parseError) {
+        console.error(`Error parsing Python output: ${parseError.message}`);
+        console.error(`Raw output: ${output}`);
+        throw new Error(`Error parsing Python output: ${parseError.message}`);
+      }
+      
       const accuracy = result.accuracy || (0.75 + Math.random() * 0.20);
       
       // Clean up the temporary file

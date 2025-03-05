@@ -48,7 +48,15 @@ serve(async (req) => {
       const output = new TextDecoder().decode(stdout);
       console.log(`Python prediction output: ${output}`);
       
-      const result = JSON.parse(output);
+      let result;
+      try {
+        result = JSON.parse(output);
+      } catch (parseError) {
+        console.error(`Error parsing Python output: ${parseError.message}`);
+        console.error(`Raw output: ${output}`);
+        throw new Error(`Error parsing Python output: ${parseError.message}`);
+      }
+      
       const predictions = result.predictions || [];
       
       // Clean up the temporary file
@@ -82,9 +90,9 @@ serve(async (req) => {
       console.log("Falling back to prediction simulation");
       
       // For this simulation, we'll generate mock predictions
-      const predictions = inputData.map(row => {
+      const predictions = Array.isArray(inputData) ? inputData.map(row => {
         // Create realistic predictions based on input
-        if (typeof row[0] === 'number') {
+        if (Array.isArray(row) && typeof row[0] === 'number') {
           // For regression-like problems
           return parseFloat((Math.sin(row[0]) * 5 + 3 + Math.random()).toFixed(2));
         } else {
@@ -92,7 +100,7 @@ serve(async (req) => {
           const classes = ["class_a", "class_b", "class_c"];
           return classes[Math.floor(Math.random() * classes.length)];
         }
-      });
+      }) : [];
       
       console.log(`Simulated prediction result: ${JSON.stringify(predictions)}`);
       

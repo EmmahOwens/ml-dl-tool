@@ -27,12 +27,29 @@ export function TrainingProgress({
   const [status, setStatus] = useState<"idle" | "training" | "paused" | "completed" | "error">("idle");
   const [logs, setLogs] = useState<string[]>([]);
   const [open, setOpen] = useState(false);
+  const [trainingTime, setTrainingTime] = useState<number | null>(null);
+  const [startTime, setStartTime] = useState<number | null>(null);
+  
+  // Initialize or update status based on isTraining prop
+  useEffect(() => {
+    if (isTraining && status === "idle") {
+      setStatus("training");
+      setProgress(0);
+      setLogs([]);
+      setStartTime(Date.now());
+    } else if (!isTraining && status === "training") {
+      // If external control stops training but we haven't reached 100%
+      if (progress < 100) {
+        setStatus("paused");
+      }
+    }
+  }, [isTraining, status, progress]);
   
   // Simulate training progress
   useEffect(() => {
     let interval: NodeJS.Timeout;
     
-    if (isTraining && status === "training" && progress < 100) {
+    if (status === "training" && progress < 100) {
       interval = setInterval(() => {
         setProgress(prev => {
           const increment = Math.random() * 3; // Random progress increment
@@ -49,6 +66,9 @@ export function TrainingProgress({
           // Complete when reaching 100%
           if (newValue >= 100) {
             setStatus("completed");
+            if (startTime) {
+              setTrainingTime(Math.floor((Date.now() - startTime) / 1000));
+            }
             clearInterval(interval);
           }
           
@@ -58,31 +78,23 @@ export function TrainingProgress({
     }
     
     return () => clearInterval(interval);
-  }, [isTraining, status, progress]);
-  
-  // Initialize training when isTraining prop changes
-  useEffect(() => {
-    if (isTraining && status === "idle") {
-      setStatus("training");
-      setProgress(0);
-      setLogs([]);
-    }
-  }, [isTraining, status]);
+  }, [status, progress, startTime]);
   
   const handlePause = () => {
     setStatus("paused");
-    onPause?.();
+    if (onPause) onPause();
   };
   
   const handleResume = () => {
     setStatus("training");
-    onResume?.();
+    if (onResume) onResume();
   };
   
   const handleCancel = () => {
     setStatus("idle");
     setProgress(0);
-    onCancel?.();
+    setLogs([]);
+    if (onCancel) onCancel();
   };
   
   const statusColors = {
@@ -107,6 +119,13 @@ export function TrainingProgress({
     paused: <Play className="h-4 w-4" />,
     completed: <CheckCircle2 className="h-4 w-4" />,
     error: <AlertCircle className="h-4 w-4" />
+  };
+
+  // Format the training time as minutes and seconds
+  const formatTrainingTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}m ${secs}s`;
   };
 
   return (
@@ -190,8 +209,8 @@ export function TrainingProgress({
         <div className="text-xs text-muted-foreground flex items-center gap-1">
           {status === "training" ? (
             <span className="animate-pulse">Estimating time remaining...</span>
-          ) : status === "completed" ? (
-            <span>Training completed in 1m 23s</span>
+          ) : status === "completed" && trainingTime ? (
+            <span>Training completed in {formatTrainingTime(trainingTime)}</span>
           ) : null}
         </div>
       </CardFooter>
