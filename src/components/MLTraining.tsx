@@ -29,6 +29,7 @@ interface MLTrainingProps {
   target: string;
   datasetName: string;
   onTrainingComplete: () => void;
+  onStartTraining: () => void;
 }
 
 export function MLTraining({
@@ -37,6 +38,7 @@ export function MLTraining({
   target,
   datasetName,
   onTrainingComplete,
+  onStartTraining,
 }: MLTrainingProps) {
   const { addModel } = useModels();
   const [isTraining, setIsTraining] = useState(false);
@@ -118,6 +120,7 @@ export function MLTraining({
       setIsTraining(true);
       setTrainingProgress(0);
       setTrainingResults([]);
+      onStartTraining(); // Call the onStartTraining prop when training starts
 
       const progressInterval = setInterval(() => {
         setTrainingProgress((prev) => {

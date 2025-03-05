@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -24,9 +23,17 @@ interface DLTrainingProps {
   target: string;
   datasetName: string;
   onTrainingComplete: () => void;
+  onStartTraining: () => void;
 }
 
-export function DLTraining({ data, features, target, datasetName, onTrainingComplete }: DLTrainingProps) {
+export function DLTraining({ 
+  data, 
+  features, 
+  target, 
+  datasetName, 
+  onTrainingComplete,
+  onStartTraining
+}: DLTrainingProps) {
   const { addModel } = useModels();
   const [isCustom, setIsCustom] = useState(false);
   const [isTraining, setIsTraining] = useState(false);
@@ -214,6 +221,7 @@ export function DLTraining({ data, features, target, datasetName, onTrainingComp
     setIsTraining(true);
     setTrainingProgress(0);
     setTrainingResults([]);
+    onStartTraining(); // Call the onStartTraining prop when training starts
     
     const newResults: {target: string, accuracy: number, layers: number}[] = [];
 
