@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { useTheme } from "@/context/ThemeContext";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -57,11 +56,9 @@ export function HyperparameterTuning() {
   const startTuning = () => {
     setIsTuning(true);
     
-    // Simulate tuning process - would be replaced with actual API call
     setTimeout(() => {
       setIsTuning(false);
       
-      // Add a simulated new result
       const newResult: TuningResult = {
         id: tuningResults.length + 1,
         params: {
@@ -303,8 +300,8 @@ export function HyperparameterTuning() {
                       unit=""
                     />
                     <Tooltip 
-                      formatter={(value, name) => {
-                        if (name === "Accuracy") return [`${(value * 100).toFixed(2)}%`, name];
+                      formatter={(value: any, name: any) => {
+                        if (name === "Accuracy") return [`${(Number(value) * 100).toFixed(2)}%`, name];
                         return [value, name];
                       }}
                       contentStyle={{

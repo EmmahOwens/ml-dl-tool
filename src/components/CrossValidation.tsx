@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { useTheme } from "@/context/ThemeContext";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -37,9 +36,7 @@ export function CrossValidation() {
   const runValidation = () => {
     setIsRunning(true);
     
-    // Simulate running validation - would connect to real API in production
     setTimeout(() => {
-      // Generate new random results based on folds
       const newResults: ValidationResult[] = Array.from({ length: folds }, (_, i) => ({
         fold: i + 1,
         trainAccuracy: 0.88 + Math.random() * 0.07,
@@ -53,14 +50,12 @@ export function CrossValidation() {
     }, 2000);
   };
   
-  // Calculate averages and show summaries
   const avgTrainAccuracy = validationResults.reduce((sum, result) => sum + result.trainAccuracy, 0) / validationResults.length;
   const avgValAccuracy = validationResults.reduce((sum, result) => sum + result.validationAccuracy, 0) / validationResults.length;
   const stdDevValAccuracy = Math.sqrt(
     validationResults.reduce((sum, result) => sum + Math.pow(result.validationAccuracy - avgValAccuracy, 2), 0) / validationResults.length
   );
   
-  // Prepare data for distribution chart
   const distributionData = [
     { name: 'Train Accuracy', value: avgTrainAccuracy },
     { name: 'Validation Accuracy', value: avgValAccuracy },
@@ -132,7 +127,7 @@ export function CrossValidation() {
                 <Checkbox
                   id="stratified"
                   checked={isStratified}
-                  onCheckedChange={setIsStratified}
+                  onCheckedChange={(checked) => setIsStratified(checked === true)}
                 />
                 <Label htmlFor="stratified">
                   Use stratified sampling
