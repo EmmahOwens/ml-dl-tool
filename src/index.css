@@ -5,7 +5,7 @@
 
 @layer base {
   :root {
-    /* Light theme variables */
+    /* Light theme variables with improved contrast */
     --background: 220 25% 97%;
     --foreground: 220 10% 10%;
     
@@ -38,34 +38,34 @@
   }
 
   .dark {
-    /* Dark theme variables */
-    --background: 220 15% 16%;
-    --foreground: 220 10% 90%;
+    /* Dark theme variables with better contrast and richer colors */
+    --background: 220 20% 14%;
+    --foreground: 220 10% 98%;
     
-    --card: 220 15% 18%;
-    --card-foreground: 220 10% 90%;
+    --card: 220 20% 16%;
+    --card-foreground: 220 10% 98%;
     
-    --popover: 220 15% 16%;
-    --popover-foreground: 220 10% 90%;
+    --popover: 220 20% 14%;
+    --popover-foreground: 220 10% 98%;
     
-    --primary: 220 90% 56%;
+    --primary: 221 83% 65%;
     --primary-foreground: 220 95% 98%;
     
-    --secondary: 220 20% 24%;
-    --secondary-foreground: 220 10% 80%;
+    --secondary: 220 25% 22%;
+    --secondary-foreground: 220 10% 90%;
     
-    --muted: 220 20% 22%;
-    --muted-foreground: 220 10% 60%;
+    --muted: 220 25% 20%;
+    --muted-foreground: 220 10% 70%;
     
-    --accent: 262 83% 58%;
+    --accent: 262 83% 68%;
     --accent-foreground: 220 95% 98%;
     
-    --destructive: 0 74% 42%;
+    --destructive: 0 74% 52%;
     --destructive-foreground: 220 95% 98%;
     
-    --border: 220 20% 24%;
-    --input: 220 20% 24%;
-    --ring: 220 90% 56%;
+    --border: 220 25% 22%;
+    --input: 220 25% 22%;
+    --ring: 221 83% 65%;
   }
 }
 
@@ -80,6 +80,7 @@
 }
 
 @layer components {
+  /* Neumorphic design system classes with enhancements */
   .neu-element {
     @apply bg-secondary rounded-xl transition-all duration-300 ease-in-out;
   }
@@ -104,6 +105,7 @@
     @apply shadow-neudark-inset;
   }
 
+  /* Card styles */
   .card-container {
     @apply p-6 m-4 rounded-xl transition-all duration-300;
   }
@@ -116,6 +118,7 @@
     @apply bg-secondary shadow-neudark hover:shadow-neudark-sm;
   }
 
+  /* Button styles */
   .button-primary {
     @apply px-6 py-3 rounded-lg font-medium transition-all duration-300 
            focus:outline-none focus:ring-2 focus:ring-primary focus:ring-opacity-50;
@@ -146,6 +149,7 @@
            hover:shadow-neudark hover:brightness-105;
   }
 
+  /* Input styles */
   .input-field {
     @apply w-full px-4 py-3 rounded-lg transition-all duration-300 
            focus:outline-none focus:ring-2 focus:ring-primary focus:ring-opacity-50;
@@ -157,6 +161,32 @@
 
   .input-field-dark {
     @apply bg-secondary text-secondary-foreground shadow-neudark-inset;
+  }
+
+  /* Loading state classes */
+  .loading-pulse {
+    @apply animate-pulse-subtle;
+  }
+
+  .loading-spinner {
+    @apply animate-spin;
+  }
+
+  .shimmer {
+    @apply relative overflow-hidden;
+  }
+
+  .shimmer::after {
+    @apply absolute inset-0;
+    content: '';
+    animation: shimmer 2s infinite;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0.05) 50%,
+      transparent 100%
+    );
+    transform: translateX(-100%);
   }
 }
 
@@ -181,4 +211,40 @@
   opacity: 0;
   transform: translateY(-10px);
   transition: opacity 300ms, transform 300ms;
+}
+
+/* Shimmer animation for loading states */
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* Custom scroll styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-background;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-muted rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-muted-foreground/60;
+}
+
+/* Responsive adjustments for small screens */
+@media (max-width: 640px) {
+  .card-container {
+    @apply p-4 m-2;
+  }
+  
+  .button-primary, .button-secondary {
+    @apply px-4 py-2 text-sm;
+  }
 }

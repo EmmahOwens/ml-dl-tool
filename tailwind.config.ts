@@ -60,14 +60,14 @@ export default {
         sm: "calc(var(--radius) - 4px)",
       },
       boxShadow: {
-        // Neumorphic shadows for light mode
+        // Enhanced neumorphic shadows for light mode
         'neulight': '10px 10px 20px #d1d9e6, -10px -10px 20px #ffffff',
         'neulight-sm': '5px 5px 10px #d1d9e6, -5px -5px 10px #ffffff',
         'neulight-inset': 'inset 5px 5px 10px #d1d9e6, inset -5px -5px 10px #ffffff',
-        // Neumorphic shadows for dark mode
-        'neudark': '8px 8px 16px #1a1a1a, -8px -8px 16px #2c2c2c',
-        'neudark-sm': '4px 4px 8px #1a1a1a, -4px -4px 8px #2c2c2c',
-        'neudark-inset': 'inset 4px 4px 8px #1a1a1a, inset -4px -4px 8px #2c2c2c',
+        // Enhanced neumorphic shadows for dark mode
+        'neudark': '8px 8px 16px #101418, -8px -8px 16px #1e2430',
+        'neudark-sm': '4px 4px 8px #101418, -4px -4px 8px #1e2430',
+        'neudark-inset': 'inset 4px 4px 8px #101418, inset -4px -4px 8px #1e2430',
       },
       keyframes: {
         'accordion-down': {
@@ -102,6 +102,10 @@ export default {
           '0%, 100%': { opacity: '1' },
           '50%': { opacity: '0.8' },
         },
+        'shimmer': {
+          '0%': { transform: 'translateX(-100%)' },
+          '100%': { transform: 'translateX(100%)' },
+        },
       },
       animation: {
         'accordion-down': 'accordion-down 0.2s ease-out',
@@ -112,6 +116,7 @@ export default {
         'slide-down': 'slide-down 0.4s ease-out',
         'scale-in': 'scale-in 0.3s ease-out',
         'pulse-subtle': 'pulse-subtle 2s ease-in-out infinite',
+        'shimmer': 'shimmer 2s ease-in-out infinite',
       },
     },
   },
