@@ -409,8 +409,8 @@ feature_importance = {}  # K-means doesn't provide direct feature importance
     
     script += `
 ${layerConfig}
-epochs = ${epochs or 100}
-learning_rate = ${learningRate or 0.001}
+epochs = ${epochs || 100}
+learning_rate = ${learningRate || 0.001}
 
 if HAS_TF:
     # Try using TensorFlow if available

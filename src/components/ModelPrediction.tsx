@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -157,7 +158,8 @@ export function ModelPrediction({ model, isClusteringModel = false }: ModelPredi
       return {
         name: label,
         probability: prob,
-        value: prob
+        value: prob,
+        isHighest: prob === Math.max(...probs)
       };
     });
   };
@@ -327,10 +329,7 @@ export function ModelPrediction({ model, isClusteringModel = false }: ModelPredi
                           />
                           <Bar 
                             dataKey="value" 
-                            fill={(entry) => {
-                              const maxProb = Math.max(...probs);
-                              return entry.value === maxProb ? "#3b82f6" : "#ef4444";
-                            }}
+                            fill={(entry) => entry.isHighest ? "#3b82f6" : "#ef4444"}
                           />
                         </BarChart>
                       </ResponsiveContainer>
