@@ -16,8 +16,12 @@ serve(async (req) => {
     console.log(`Input data: ${JSON.stringify(inputData)}`);
     
     // Fetch the model from the database
-    const supabaseUrl = Deno.env.get("SUPABASE_URL") || "https://uysdqwhyhqhamwvzsolw.supabase.co";
+    const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") || "";
+    
+    if (!supabaseUrl || !supabaseAnonKey) {
+      throw new Error("Missing required environment variables: SUPABASE_URL or SUPABASE_ANON_KEY");
+    }
     
     const response = await fetch(`${supabaseUrl}/rest/v1/models?id=eq.${modelId}&select=*`, {
       headers: {

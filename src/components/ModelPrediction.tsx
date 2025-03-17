@@ -1,319 +1,419 @@
-
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Separator } from "@/components/ui/separator";
+import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { AlertCircle, ArrowRight, Brain, Calculator, CheckCircle2, ChevronsUpDown, Loader2, Table, X } from "lucide-react";
-import { useModels, Model } from "@/context/ModelContext";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { Model, useModels } from "@/context/ModelContext";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import { PlusCircle, UploadCloud, AlertCircle, CheckCircle2, RefreshCw, ChevronDown, ChevronUp } from "lucide-react";
+import { toast } from "sonner";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Tooltip as UITooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface ModelPredictionProps {
   model: Model;
-  features?: string[];
+  isClusteringModel?: boolean;
 }
 
-export function ModelPrediction({ model, features }: ModelPredictionProps) {
+export function ModelPrediction({ model, isClusteringModel = false }: ModelPredictionProps) {
   const { predictWithModel } = useModels();
-  
-  const [inputValues, setInputValues] = useState<Record<string, string>>({});
-  const [isLoading, setIsLoading] = useState(false);
+  const [inputRows, setInputRows] = useState<Array<Record<string, number | string>>>([{}]);
+  const [results, setResults] = useState<any[] | null>(null);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [predictions, setPredictions] = useState<any[] | null>(null);
+  const [features, setFeatures] = useState<string[]>([]);
+  const [explanationOpen, setExplanationOpen] = useState(false);
+  const [explanation, setExplanation] = useState<any>(null);
   const [probabilities, setProbabilities] = useState<any[] | null>(null);
-  const [explanation, setExplanation] = useState<any | null>(null);
-  const [isExplanationOpen, setIsExplanationOpen] = useState(false);
   
-  // Use features from props or from model
-  const modelFeatures = features || model.parameters?.features || [];
+  useEffect(() => {
+    if (model && model.parameters && model.parameters.availableFeatures) {
+      setFeatures(model.parameters.availableFeatures);
+    } else if (model && model.parameters && model.parameters.feature_importance) {
+      setFeatures(Object.keys(model.parameters.feature_importance));
+    } else {
+      setFeatures([]);
+    }
+  }, [model]);
   
-  const handleInputChange = (feature: string, value: string) => {
-    setInputValues(prev => ({
-      ...prev,
-      [feature]: value
-    }));
+  useEffect(() => {
+    if (features.length > 0 && inputRows.length === 1 && Object.keys(inputRows[0]).length === 0) {
+      const initialRow = features.reduce((acc, feature) => {
+        acc[feature] = '';
+        return acc;
+      }, {} as Record<string, string | number>);
+      
+      setInputRows([initialRow]);
+    }
+  }, [features, inputRows]);
+  
+  const handleInputChange = (rowIndex: number, feature: string, value: string) => {
+    const newRows = [...inputRows];
+    
+    const parsedValue = !isNaN(parseFloat(value)) ? parseFloat(value) : value;
+    
+    newRows[rowIndex] = {
+      ...newRows[rowIndex],
+      [feature]: parsedValue
+    };
+    
+    setInputRows(newRows);
   };
   
-  const validateInputs = () => {
-    const missingFeatures = modelFeatures.filter(feature => !inputValues[feature]);
-    if (missingFeatures.length > 0) {
-      setError(`Missing values for: ${missingFeatures.join(', ')}`);
-      return false;
-    }
+  const addRow = () => {
+    const newRow = features.reduce((acc, feature) => {
+      acc[feature] = '';
+      return acc;
+    }, {} as Record<string, string | number>);
     
-    // Check if all inputs are valid numbers
-    for (const [feature, value] of Object.entries(inputValues)) {
-      if (isNaN(Number(value))) {
-        setError(`Invalid number for ${feature}: ${value}`);
-        return false;
-      }
-    }
-    
-    setError(null);
-    return true;
+    setInputRows([...inputRows, newRow]);
   };
   
-  const handlePredict = async () => {
-    if (!validateInputs()) return;
-    
-    setIsLoading(true);
-    setPredictions(null);
-    setProbabilities(null);
-    setExplanation(null);
-    
+  const removeRow = (index: number) => {
+    if (inputRows.length > 1) {
+      const newRows = [...inputRows];
+      newRows.splice(index, 1);
+      setInputRows(newRows);
+    }
+  };
+  
+  const predict = async () => {
     try {
-      // Format inputs as array in the same order as features
-      const inputData = [modelFeatures.map(feature => Number(inputValues[feature] || 0))];
+      setLoading(true);
+      setError(null);
+      setResults(null);
+      setProbabilities(null);
+      setExplanation(null);
+      
+      const missingValues = inputRows.some(row => 
+        features.some(feature => row[feature] === undefined || row[feature] === '')
+      );
+      
+      if (missingValues) {
+        throw new Error("Please fill in all input values before making predictions");
+      }
+      
+      const inputData = inputRows.map(row => {
+        return features.map(feature => {
+          const value = row[feature];
+          return typeof value === 'string' && !isNaN(parseFloat(value)) ? 
+            parseFloat(value) : value;
+        });
+      });
       
       const result = await predictWithModel(model.id, inputData);
       
       if (!result.success) {
-        throw new Error("Prediction failed");
+        throw new Error("Prediction failed. Please try again.");
       }
       
-      setPredictions(Array.isArray(result.predictions) ? result.predictions : [result.predictions]);
-      setProbabilities(result.probabilities || []);
-      setExplanation(result.explanation || null);
+      setResults(result.predictions);
+      if (result.probabilities) {
+        setProbabilities(result.probabilities);
+      }
+      if (result.explanation) {
+        setExplanation(result.explanation);
+      }
+      
+      toast.success("Prediction completed successfully");
     } catch (err) {
-      console.error("Error making prediction:", err);
-      setError(err instanceof Error ? err.message : String(err));
+      console.error("Prediction error:", err);
+      setError(err instanceof Error ? err.message : "An unknown error occurred");
+      toast.error("Prediction failed");
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
   
-  const resetForm = () => {
-    setInputValues({});
-    setPredictions(null);
-    setProbabilities(null);
-    setExplanation(null);
-    setError(null);
-  };
-  
-  // Generate sample data
-  const generateSampleData = () => {
-    // Reset previous results
-    setPredictions(null);
-    setProbabilities(null);
-    setExplanation(null);
+  const formatPredictionResult = (prediction: any, index: number) => {
+    if (prediction === null || prediction === undefined) return "N/A";
     
-    // Create sample input values for each feature
-    const sampleData: Record<string, string> = {};
-    modelFeatures.forEach(feature => {
-      // Generate a random number (assuming numeric features)
-      const randomValue = Math.round(Math.random() * 100) / 10;
-      sampleData[feature] = randomValue.toString();
-    });
+    if (model.parameters?.class_names && Array.isArray(model.parameters.class_names)) {
+      const classIndex = typeof prediction === "number" ? 
+        Math.round(prediction) : 
+        parseInt(prediction);
+      
+      return model.parameters.class_names[classIndex] || prediction;
+    }
     
-    setInputValues(sampleData);
-  };
-  
-  // Format prediction output based on model type
-  const formatPrediction = (prediction: any): string => {
-    if (typeof prediction === 'number') {
+    if (typeof prediction === "number") {
       return prediction.toFixed(4);
     }
+    
     return String(prediction);
   };
   
-  // For classification models that output probabilities
-  const formatProbabilities = () => {
-    if (!probabilities || probabilities.length === 0) return null;
+  const prepareProbabilityChart = (probsArray: any[], index: number) => {
+    if (!probsArray || !Array.isArray(probsArray) || !probsArray[index]) return [];
     
-    // Check structure of probabilities array
-    const firstProb = probabilities[0];
-    if (!Array.isArray(firstProb)) return null;
-    
-    // Format for visualization
-    return firstProb.map((prob, index) => ({
-      class: `Class ${index}`,
-      probability: prob
-    })).sort((a, b) => b.probability - a.probability);
+    const probs = probsArray[index];
+    return probs.map((prob: number, i: number) => {
+      const label = model.parameters?.class_names && Array.isArray(model.parameters.class_names) ?
+        model.parameters.class_names[i] : `Class ${i}`;
+      
+      return {
+        name: label,
+        probability: prob,
+        value: prob
+      };
+    });
   };
   
-  const probabilityData = formatProbabilities();
-  
-  // Format feature importance data from explanation
-  const formatFeatureImportance = () => {
-    if (!explanation) return null;
-    
-    if (explanation.feature_importance) {
-      return modelFeatures.map((feature, index) => ({
-        feature,
-        importance: explanation.feature_importance[index]
-      })).sort((a, b) => Math.abs(b.importance) - Math.abs(a.importance));
-    }
-    
-    if (explanation.coefficients) {
-      return modelFeatures.map((feature, index) => ({
-        feature,
-        importance: explanation.coefficients[index]
-      })).sort((a, b) => Math.abs(b.importance) - Math.abs(a.importance));
-    }
-    
-    return null;
+  const hasFeatureImportanceExplanation = () => {
+    return explanation && 
+           (explanation.feature_importance || 
+            explanation.coefficients ||
+            explanation.shap_values);
   };
   
-  const featureImportanceData = formatFeatureImportance();
+  const targetNames = model.targets || ["Target"];
   
   return (
     <Card className="w-full">
       <CardHeader>
-        <CardTitle className="flex items-center">
-          <Calculator className="mr-2 h-5 w-5" />
-          Make Predictions with {model.name}
-        </CardTitle>
+        <CardTitle className="text-lg">Make Predictions</CardTitle>
         <CardDescription>
-          Enter feature values to get predictions from this {model.algorithm} model
+          Enter input values to make predictions with the {model.algorithm} model
         </CardDescription>
       </CardHeader>
       
-      <CardContent>
+      <CardContent className="space-y-4">
         {error && (
-          <Alert variant="destructive" className="mb-4">
+          <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
         
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-          {modelFeatures.slice(0, 10).map(feature => (
-            <div key={feature} className="space-y-2">
-              <Label htmlFor={`input-${feature}`} className="text-sm font-medium">
-                {feature}
-              </Label>
-              <Input
-                id={`input-${feature}`}
-                value={inputValues[feature] || ''}
-                onChange={(e) => handleInputChange(feature, e.target.value)}
-                type="number"
-                step="any"
-                placeholder={`Enter ${feature} value`}
-              />
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <Label>Input Features</Label>
+            <div className="flex gap-2">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={addRow}
+                disabled={loading}
+              >
+                <PlusCircle className="h-4 w-4 mr-1" />
+                Add Row
+              </Button>
             </div>
-          ))}
+          </div>
           
-          {modelFeatures.length > 10 && (
-            <div className="md:col-span-2">
-              <Alert>
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>
-                  This model has {modelFeatures.length} features. Showing only the first 10 for simplicity.
-                </AlertDescription>
-              </Alert>
-            </div>
-          )}
+          <div className="border rounded-md">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  {features.map(feature => (
+                    <TableHead key={feature} className="whitespace-nowrap">
+                      {feature}
+                    </TableHead>
+                  ))}
+                  <TableHead className="w-[50px]"></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {inputRows.map((row, rowIndex) => (
+                  <TableRow key={rowIndex}>
+                    {features.map(feature => (
+                      <TableCell key={feature} className="py-2">
+                        <Input 
+                          value={row[feature] !== undefined ? String(row[feature]) : ''} 
+                          onChange={(e) => handleInputChange(rowIndex, feature, e.target.value)}
+                          placeholder="Enter value"
+                          className="w-full"
+                          disabled={loading}
+                        />
+                      </TableCell>
+                    ))}
+                    <TableCell className="py-2">
+                      {inputRows.length > 1 && (
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          onClick={() => removeRow(rowIndex)}
+                          disabled={loading}
+                        >
+                          <AlertCircle className="h-4 w-4 text-destructive" />
+                        </Button>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         </div>
         
-        <div className="flex flex-col sm:flex-row gap-2 justify-end">
-          <Button variant="outline" type="button" onClick={generateSampleData}>
-            Generate Sample Data
-          </Button>
-          <Button variant="outline" type="button" onClick={resetForm}>
-            Reset
-          </Button>
-          <Button type="button" onClick={handlePredict} disabled={isLoading}>
-            {isLoading ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Processing...
-              </>
-            ) : (
-              <>
-                Predict <ArrowRight className="ml-2 h-4 w-4" />
-              </>
-            )}
-          </Button>
-        </div>
-        
-        {predictions && predictions.length > 0 && (
-          <div className="mt-6">
-            <Separator className="my-4" />
-            
-            <div className="space-y-4">
-              <h3 className="font-semibold flex items-center">
-                <CheckCircle2 className="mr-2 h-5 w-5 text-green-500" />
-                Prediction Results
-              </h3>
+        {results && (
+          <div className="space-y-4 pt-4">
+            <Separator />
+            <div>
+              <h3 className="text-sm font-medium mb-3">Prediction Results</h3>
               
-              <div className="rounded-md border p-4 bg-muted/50">
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">Predicted value:</span>
-                    <span className="text-xl font-bold">{formatPrediction(predictions[0])}</span>
-                  </div>
-                  
-                  {probabilityData && (
-                    <div className="mt-4">
-                      <h4 className="text-sm font-medium mb-2">Prediction Probabilities:</h4>
-                      <div className="h-40">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <BarChart data={probabilityData} layout="vertical" margin={{ left: 100 }}>
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis type="number" domain={[0, 1]} tickFormatter={(value) => `${(value * 100).toFixed(0)}%`} />
-                            <YAxis dataKey="class" type="category" width={80} />
-                            <Tooltip formatter={(value) => [`${(Number(value) * 100).toFixed(2)}%`, 'Probability']} />
-                            <Bar dataKey="probability" fill="#22c55e" />
-                          </BarChart>
-                        </ResponsiveContainer>
+              <div className="border rounded-md">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-[50px]">Row</TableHead>
+                      {targetNames.map((target, i) => (
+                        <TableHead key={i}>{target}</TableHead>
+                      ))}
+                      {probabilities && probabilities.length > 0 && (
+                        <TableHead>Confidence</TableHead>
+                      )}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {results.map((result, rowIndex) => {
+                      const isArray = Array.isArray(result);
+                      return (
+                        <TableRow key={rowIndex}>
+                          <TableCell className="font-medium">{rowIndex + 1}</TableCell>
+                          {isArray ? (
+                            result.map((val, j) => (
+                              <TableCell key={j}>
+                                <Badge variant="outline" className="font-mono">
+                                  {formatPredictionResult(val, j)}
+                                </Badge>
+                              </TableCell>
+                            ))
+                          ) : (
+                            <TableCell>
+                              <Badge variant="outline" className="font-mono">
+                                {formatPredictionResult(result, 0)}
+                              </Badge>
+                            </TableCell>
+                          )}
+                          {probabilities && probabilities.length > 0 && (
+                            <TableCell>
+                              <div className="h-3 w-full bg-muted rounded-full overflow-hidden">
+                                <div 
+                                  className="h-full bg-primary rounded-full"
+                                  style={{ 
+                                    width: `${Math.max(...(Array.isArray(probabilities[rowIndex]) ? 
+                                      probabilities[rowIndex] : [0])) * 100}%` 
+                                  }}
+                                />
+                              </div>
+                            </TableCell>
+                          )}
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+            
+            {probabilities && probabilities.length > 0 && probabilities[0] && probabilities[0].length > 1 && (
+              <div className="pt-2">
+                <h3 className="text-sm font-medium mb-3">Class Probabilities</h3>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {probabilities.map((probs, rowIndex) => (
+                    <div key={rowIndex} className="border rounded-md p-4">
+                      <h4 className="text-sm font-medium mb-2">Row {rowIndex + 1}</h4>
+                      <ResponsiveContainer width="100%" height={200}>
+                        <BarChart data={prepareProbabilityChart(probabilities, rowIndex)}>
+                          <XAxis dataKey="name" />
+                          <YAxis tickFormatter={(value) => `${(value * 100).toFixed(0)}%`} />
+                          <Tooltip 
+                            formatter={(value: number) => [`${(value * 100).toFixed(2)}%`, "Probability"]} 
+                          />
+                          <Bar 
+                            dataKey="value" 
+                            fill={(entry) => {
+                              const maxProb = Math.max(...probs);
+                              return entry.value === maxProb ? "#3b82f6" : "#ef4444";
+                            }}
+                          />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            
+            {hasFeatureImportanceExplanation() && (
+              <Collapsible open={explanationOpen} onOpenChange={setExplanationOpen}>
+                <div className="flex justify-between items-center">
+                  <h3 className="text-sm font-medium">Prediction Explanation</h3>
+                  <CollapsibleTrigger asChild>
+                    <Button variant="ghost" size="sm">
+                      {explanationOpen ? (
+                        <ChevronUp className="h-4 w-4" />
+                      ) : (
+                        <ChevronDown className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </CollapsibleTrigger>
+                </div>
+                
+                <CollapsibleContent className="pt-2">
+                  {explanation.feature_importance && (
+                    <div className="space-y-2">
+                      <h4 className="text-xs font-medium">Feature Importance</h4>
+                      <div className="max-h-40 overflow-y-auto space-y-1">
+                        {Object.entries(explanation.feature_importance)
+                          .sort(([, a]: [string, any], [, b]: [string, any]) => b - a)
+                          .map(([feature, value]: [string, any], index) => (
+                            <div key={index} className="flex justify-between text-xs">
+                              <span>{feature}</span>
+                              <span className="font-mono">{typeof value === 'number' ? value.toFixed(4) : value}</span>
+                            </div>
+                          ))
+                        }
                       </div>
                     </div>
                   )}
-                </div>
-              </div>
-              
-              {featureImportanceData && (
-                <Collapsible
-                  open={isExplanationOpen}
-                  onOpenChange={setIsExplanationOpen}
-                  className="border rounded-md p-2"
-                >
-                  <CollapsibleTrigger asChild>
-                    <div className="flex items-center justify-between p-2 cursor-pointer hover:bg-muted/50 rounded">
-                      <h4 className="text-sm font-medium flex items-center">
-                        <Brain className="mr-2 h-4 w-4" />
-                        Model Explanation
-                      </h4>
-                      <ChevronsUpDown className="h-4 w-4" />
-                    </div>
-                  </CollapsibleTrigger>
-                  <CollapsibleContent className="pt-2">
-                    <div className="space-y-4 p-2">
-                      <p className="text-sm text-muted-foreground">
-                        This chart shows how each feature influenced the prediction:
-                      </p>
-                      <div className="h-60">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <BarChart data={featureImportanceData} layout="vertical" margin={{ left: 100 }}>
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis type="number" />
-                            <YAxis dataKey="feature" type="category" width={100} />
-                            <Tooltip formatter={(value) => [`${Number(value).toFixed(4)}`, 'Importance']} />
-                            <Bar 
-                              dataKey="importance" 
-                              fill={(entry) => entry.importance > 0 ? "#3b82f6" : "#ef4444"}
-                            />
-                          </BarChart>
-                        </ResponsiveContainer>
+                  
+                  {explanation.coefficients && (
+                    <div className="space-y-2 mt-4">
+                      <h4 className="text-xs font-medium">Coefficients</h4>
+                      <div className="max-h-40 overflow-y-auto space-y-1">
+                        {Object.entries(explanation.coefficients)
+                          .map(([feature, value]: [string, any], index) => (
+                            <div key={index} className="flex justify-between text-xs">
+                              <span>{feature}</span>
+                              <span className="font-mono">{typeof value === 'number' ? value.toFixed(4) : value}</span>
+                            </div>
+                          ))
+                        }
                       </div>
-                      <p className="text-xs text-muted-foreground">
-                        {explanation.feature_importance ? 
-                          "Longer bars indicate features with higher impact on the prediction." : 
-                          "Positive values indicate positive influence on prediction, negative values indicate negative influence."}
-                      </p>
                     </div>
-                  </CollapsibleContent>
-                </Collapsible>
-              )}
-            </div>
+                  )}
+                </CollapsibleContent>
+              </Collapsible>
+            )}
           </div>
         )}
       </CardContent>
+      
+      <CardFooter>
+        <Button 
+          onClick={predict} 
+          disabled={loading || features.length === 0}
+          className="w-full"
+        >
+          {loading ? (
+            <>
+              <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+              Making Prediction...
+            </>
+          ) : (
+            <>
+              <CheckCircle2 className="h-4 w-4 mr-2" />
+              Make Prediction
+            </>
+          )}
+        </Button>
+      </CardFooter>
     </Card>
   );
 }

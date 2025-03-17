@@ -68,7 +68,7 @@ interface ModelContextType {
   refreshModels: () => Promise<void>;
   fineTuneModel: (id: string, options: FineTuneOptions) => Promise<void>;
   downloadModel: (id: string, fileExtension?: string) => Promise<void>;
-  predictWithModel: (id: string, inputData: any[]) => Promise<{ predictions: any; success: boolean; explanation?: any }>;
+  predictWithModel: (id: string, inputData: any[]) => Promise<{ predictions: any; success: boolean; explanation?: any; probabilities?: any[] }>;
 }
 
 // Options for fine-tuning a model
@@ -642,7 +642,7 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({
   };
 
   // Add the new predictWithModel function
-  const predictWithModel = async (id: string, inputData: any[]): Promise<{ predictions: any; success: boolean; explanation?: any }> => {
+  const predictWithModel = async (id: string, inputData: any[]): Promise<{ predictions: any; success: boolean; explanation?: any; probabilities?: any[] }> => {
     try {
       const model = getModelById(id);
       
@@ -673,7 +673,7 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({
       
       const result = await response.json();
       
-      // Return the predictions and explanation if available
+      // Return the predictions, probabilities, and explanation if available
       return {
         predictions: result.predictions,
         probabilities: result.probabilities,
@@ -682,7 +682,7 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({
       };
     } catch (error) {
       console.error("Error making prediction:", error);
-      toast.error(`Prediction failed: ${error.message}`);
+      toast.error(`Prediction failed: ${error instanceof Error ? error.message : String(error)}`);
       
       return {
         predictions: null,

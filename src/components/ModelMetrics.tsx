@@ -1,431 +1,386 @@
 
-import React from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import React, { useState } from "react";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Progress } from "@/components/ui/progress";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from "recharts";
 import { Model } from "@/context/ModelContext";
-import { Separator } from "@/components/ui/separator";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { AlertCircle, CheckCircle2, HelpCircle, Info } from "lucide-react";
-import { Tooltip as UITooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, LineChart, Line } from "recharts";
+import { Badge } from "@/components/ui/badge";
+import { Brain, BarChart3, TrendingUp, Activity, Layers } from "lucide-react";
+import { formatDate } from "@/utils/dateUtils";
 
 interface ModelMetricsProps {
   model: Model;
 }
 
 export function ModelMetrics({ model }: ModelMetricsProps) {
-  const { metrics = {}, parameters = {} } = model;
-  const isClassification = model.type === "ML" && !metrics.hasOwnProperty("r2_score");
-  const isRegression = model.type === "ML" && metrics.hasOwnProperty("r2_score");
-  const isClustering = model.type === "Clustering";
+  const [activeTab, setActiveTab] = useState("overview");
   
-  const confusionMatrix = parameters.confusion_matrix || [];
-  const featureImportance = parameters.feature_importance || {};
+  // Safely extract metrics from parameters
+  const metrics = model.parameters?.metrics || {};
+  const featureImportance = model.parameters?.feature_importance || {};
+  const confusionMatrix = model.parameters?.confusion_matrix || null;
   
-  // Convert feature importance to chart data
-  const featureImportanceData = Object.entries(featureImportance)
-    .map(([feature, importance]) => ({
-      feature,
-      importance: Number(importance)
-    }))
-    .sort((a, b) => b.importance - a.importance)
-    .slice(0, 10); // Top 10 features
+  // Format feature importance data for chart
+  const featureImportanceData = Object.entries(featureImportance).map(([feature, value]) => ({
+    feature: feature.length > 15 ? `${feature.substring(0, 12)}...` : feature,
+    importance: typeof value === 'number' ? value : 0,
+    fullName: feature
+  })).sort((a, b) => b.importance - a.importance).slice(0, 10);
+  
+  // Helper function to determine if a model is classification or regression
+  const isClassificationModel = () => {
+    // Check algorithm type
+    const classificationAlgorithms = [
+      "Logistic Regression", "Decision Tree", "Random Forest", 
+      "SVM", "XGBoost", "KNN", "Naive Bayes"
+    ];
     
-  const formatValue = (value: number) => {
-    return value.toFixed(4);
+    if (classificationAlgorithms.includes(model.algorithm)) return true;
+    
+    // Check metrics
+    return metrics.accuracy !== undefined && metrics.r2_score === undefined;
   };
   
-  // Helper function to determine metric color
-  const getMetricColor = (metricName: string, value: number) => {
-    if (metricName === "accuracy" || metricName === "r2_score" || metricName === "precision" || 
-        metricName === "recall" || metricName === "f1_score") {
-      if (value > 0.8) return "text-green-600";
-      if (value > 0.6) return "text-amber-600";
-      return "text-red-600";
-    }
-    if (metricName === "mse" || metricName === "inertia") {
-      if (value < 0.2) return "text-green-600";
-      if (value < 0.5) return "text-amber-600";
-      return "text-red-600";
-    }
-    return "text-foreground";
+  // Helper to get proper metric name
+  const getMainMetricName = () => {
+    if (isClassificationModel()) return "Accuracy";
+    return "R² Score";
   };
   
-  // Helper for confusion matrix colors
-  const getConfusionMatrixColor = (value: number, max: number) => {
-    const intensity = Math.min(value / max, 1);
-    return `rgba(14, 165, 233, ${intensity})`;
+  // Helper to get proper metric value
+  const getMainMetricValue = () => {
+    if (isClassificationModel()) {
+      return metrics.accuracy !== undefined ? 
+        (metrics.accuracy * 100).toFixed(2) + "%" : 
+        (model.accuracy * 100).toFixed(2) + "%";
+    }
+    return metrics.r2_score !== undefined ? 
+      metrics.r2_score.toFixed(4) : 
+      model.accuracy.toFixed(4);
+  };
+  
+  // Process neural network architecture if available
+  const renderNeuralNetworkArchitecture = () => {
+    if (!model.neuralNetworkArchitecture || model.algorithm !== "Neural Network") {
+      return <p className="text-muted-foreground">No neural network architecture available.</p>;
+    }
+    
+    // Calculate the max number of neurons for scaling
+    let maxNeurons = 0;
+    if (Array.isArray(model.neuralNetworkArchitecture)) {
+      model.neuralNetworkArchitecture.forEach((layer) => {
+        if (typeof layer === 'object' && layer.neurons > maxNeurons) {
+          maxNeurons = layer.neurons;
+        }
+      });
+    }
+    
+    return (
+      <div className="mt-4">
+        <h3 className="text-sm font-medium mb-2">Neural Network Architecture</h3>
+        <div className="flex items-center justify-center space-x-2 py-8">
+          {Array.isArray(model.neuralNetworkArchitecture) && model.neuralNetworkArchitecture.map((layer, index) => {
+            const neurons = typeof layer === 'object' ? layer.neurons : layer;
+            const activation = typeof layer === 'object' ? layer.activation : "ReLU";
+            const layerHeight = Math.max(50, (neurons / maxNeurons) * 150);
+            
+            return (
+              <div key={index} className="flex flex-col items-center">
+                <div 
+                  className="bg-primary/80 rounded-lg flex items-center justify-center p-2 text-white font-mono text-xs relative"
+                  style={{ 
+                    width: "60px", 
+                    height: `${layerHeight}px`, 
+                    minHeight: "50px" 
+                  }}
+                >
+                  {neurons}
+                  <div className="absolute -bottom-6 text-xs text-muted-foreground whitespace-nowrap">
+                    {activation}
+                  </div>
+                </div>
+                {index < (Array.isArray(model.neuralNetworkArchitecture) ? model.neuralNetworkArchitecture.length - 1 : 0) && (
+                  <div className="w-8 h-0.5 bg-muted mt-4 mx-2" />
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+  
+  // Format confusion matrix for display
+  const renderConfusionMatrix = () => {
+    if (!confusionMatrix || !Array.isArray(confusionMatrix) || confusionMatrix.length === 0) {
+      return <p className="text-muted-foreground">No confusion matrix available.</p>;
+    }
+    
+    return (
+      <div className="mt-4">
+        <h3 className="text-sm font-medium mb-2">Confusion Matrix</h3>
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-300 border">
+            <thead>
+              <tr>
+                <th className="bg-muted px-3 py-2 text-xs text-left">Actual \ Predicted</th>
+                {confusionMatrix[0].map((_, colIdx) => (
+                  <th key={colIdx} className="bg-muted px-3 py-2 text-xs text-center">Class {colIdx}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200">
+              {confusionMatrix.map((row, rowIdx) => (
+                <tr key={rowIdx}>
+                  <td className="bg-muted px-3 py-2 text-xs font-medium">Class {rowIdx}</td>
+                  {row.map((cell, cellIdx) => (
+                    <td 
+                      key={cellIdx} 
+                      className={`px-3 py-2 text-center ${rowIdx === cellIdx ? 'bg-primary/10 font-medium' : ''}`}
+                    >
+                      {cell}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
+  
+  // Format algorithm-specific details
+  const renderAlgorithmDetails = () => {
+    const details = [];
+    
+    if (model.algorithm === "Linear Regression" && metrics.coef) {
+      details.push(
+        <div key="coef" className="mt-4">
+          <h3 className="text-sm font-medium mb-2">Coefficients</h3>
+          <div className="max-h-40 overflow-y-auto">
+            {Object.entries(featureImportance).map(([feature, value], index) => (
+              <div key={index} className="flex justify-between py-1 border-b text-sm">
+                <span>{feature}</span>
+                <span className="font-mono">{typeof value === 'number' ? value.toFixed(4) : '-'}</span>
+              </div>
+            ))}
+          </div>
+          <div className="mt-2 flex justify-between py-1 border-b text-sm font-medium">
+            <span>Intercept</span>
+            <span className="font-mono">{metrics.intercept ? metrics.intercept.toFixed(4) : '-'}</span>
+          </div>
+        </div>
+      );
+    }
+    
+    // Add more algorithm-specific details here
+    
+    return details.length > 0 ? details : <p className="text-muted-foreground">No additional details available.</p>;
   };
   
   return (
     <Card className="w-full">
-      <CardHeader>
-        <CardTitle className="flex items-center">
-          Model Metrics
-          <TooltipProvider>
-            <UITooltip>
-              <TooltipTrigger asChild>
-                <HelpCircle className="ml-2 h-4 w-4 text-muted-foreground" />
-              </TooltipTrigger>
-              <TooltipContent>
-                <p className="max-w-xs">Detailed performance metrics for this model based on test data during training.</p>
-              </TooltipContent>
-            </UITooltip>
-          </TooltipProvider>
-        </CardTitle>
-        <CardDescription>
-          Performance analysis for {model.name} ({model.algorithm})
-        </CardDescription>
+      <CardHeader className="pb-2">
+        <div className="flex justify-between items-start">
+          <div>
+            <CardTitle className="text-lg">{model.name}</CardTitle>
+            <CardDescription>
+              {model.algorithm} • Created {formatDate(model.created)}
+            </CardDescription>
+          </div>
+          <Badge variant={model.type === "ML" ? "default" : "secondary"}>
+            {model.type}
+          </Badge>
+        </div>
       </CardHeader>
-      <CardContent>
-        <Tabs defaultValue="overview">
+      
+      <CardContent className="pt-2">
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="w-full">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            {featureImportanceData.length > 0 && (
-              <TabsTrigger value="features">Feature Importance</TabsTrigger>
-            )}
-            {confusionMatrix.length > 0 && (
-              <TabsTrigger value="confusion">Confusion Matrix</TabsTrigger>
-            )}
-            {Object.keys(metrics).length > 0 && (
-              <TabsTrigger value="details">Detailed Metrics</TabsTrigger>
-            )}
+            <TabsTrigger value="overview" className="flex items-center">
+              <BarChart3 className="h-4 w-4 mr-1" />
+              <span className="hidden sm:inline">Overview</span>
+            </TabsTrigger>
+            <TabsTrigger value="features" className="flex items-center">
+              <TrendingUp className="h-4 w-4 mr-1" />
+              <span className="hidden sm:inline">Features</span>
+            </TabsTrigger>
+            <TabsTrigger value="architecture" className="flex items-center">
+              <Layers className="h-4 w-4 mr-1" />
+              <span className="hidden sm:inline">Architecture</span>
+            </TabsTrigger>
+            <TabsTrigger value="performance" className="flex items-center">
+              <Activity className="h-4 w-4 mr-1" />
+              <span className="hidden sm:inline">Performance</span>
+            </TabsTrigger>
           </TabsList>
           
-          <TabsContent value="overview" className="pt-4 space-y-6">
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="text-sm font-medium">Overall Accuracy</div>
-                  <div className={`text-sm font-bold ${model.accuracy > 0.8 ? "text-green-600" : model.accuracy > 0.6 ? "text-amber-600" : "text-red-600"}`}>
-                    {(model.accuracy * 100).toFixed(2)}%
-                  </div>
+          <TabsContent value="overview" className="pt-4">
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <div className="bg-muted/50 p-3 rounded-lg">
+                <div className="text-muted-foreground text-xs">
+                  {getMainMetricName()}
                 </div>
-                <Progress value={model.accuracy * 100} className="h-2" />
+                <div className="text-2xl font-semibold mt-1">
+                  {getMainMetricValue()}
+                </div>
+              </div>
+              <div className="bg-muted/50 p-3 rounded-lg">
+                <div className="text-muted-foreground text-xs">
+                  Algorithm
+                </div>
+                <div className="text-lg font-medium mt-1 truncate">
+                  {model.algorithm}
+                </div>
+              </div>
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-sm font-medium mb-2">Dataset</h3>
+                <div className="text-sm">{model.datasetName}</div>
               </div>
               
-              {isClassification && (
-                <div className="grid grid-cols-2 gap-4">
-                  {metrics.precision !== undefined && (
-                    <div className="space-y-1">
-                      <div className="flex justify-between text-sm">
-                        <div className="flex items-center gap-1">
-                          <span>Precision</span>
-                          <TooltipProvider>
-                            <UITooltip>
-                              <TooltipTrigger asChild>
-                                <Info className="h-3 w-3 text-muted-foreground" />
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p className="max-w-xs">Ratio of correctly predicted positive observations to total predicted positives</p>
-                              </TooltipContent>
-                            </UITooltip>
-                          </TooltipProvider>
-                        </div>
-                        <span className={getMetricColor("precision", metrics.precision)}>
-                          {(metrics.precision * 100).toFixed(2)}%
-                        </span>
-                      </div>
-                      <Progress value={metrics.precision * 100} className="h-1.5" />
-                    </div>
-                  )}
-                  
-                  {metrics.recall !== undefined && (
-                    <div className="space-y-1">
-                      <div className="flex justify-between text-sm">
-                        <div className="flex items-center gap-1">
-                          <span>Recall</span>
-                          <TooltipProvider>
-                            <UITooltip>
-                              <TooltipTrigger asChild>
-                                <Info className="h-3 w-3 text-muted-foreground" />
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p className="max-w-xs">Ratio of correctly predicted positive observations to all actual positives</p>
-                              </TooltipContent>
-                            </UITooltip>
-                          </TooltipProvider>
-                        </div>
-                        <span className={getMetricColor("recall", metrics.recall)}>
-                          {(metrics.recall * 100).toFixed(2)}%
-                        </span>
-                      </div>
-                      <Progress value={metrics.recall * 100} className="h-1.5" />
-                    </div>
-                  )}
-                  
-                  {metrics.f1_score !== undefined && (
-                    <div className="space-y-1">
-                      <div className="flex justify-between text-sm">
-                        <div className="flex items-center gap-1">
-                          <span>F1 Score</span>
-                          <TooltipProvider>
-                            <UITooltip>
-                              <TooltipTrigger asChild>
-                                <Info className="h-3 w-3 text-muted-foreground" />
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p className="max-w-xs">Harmonic mean of Precision and Recall</p>
-                              </TooltipContent>
-                            </UITooltip>
-                          </TooltipProvider>
-                        </div>
-                        <span className={getMetricColor("f1_score", metrics.f1_score)}>
-                          {(metrics.f1_score * 100).toFixed(2)}%
-                        </span>
-                      </div>
-                      <Progress value={metrics.f1_score * 100} className="h-1.5" />
-                    </div>
-                  )}
+              <div>
+                <h3 className="text-sm font-medium mb-2">Target Features</h3>
+                <div className="flex flex-wrap gap-1">
+                  {model.targets && model.targets.map((target, index) => (
+                    <Badge key={index} variant="outline">{target}</Badge>
+                  ))}
                 </div>
-              )}
+              </div>
               
-              {isRegression && (
-                <div className="grid grid-cols-2 gap-4">
-                  {metrics.r2_score !== undefined && (
-                    <div className="space-y-1">
-                      <div className="flex justify-between text-sm">
-                        <div className="flex items-center gap-1">
-                          <span>R² Score</span>
-                          <TooltipProvider>
-                            <UITooltip>
-                              <TooltipTrigger asChild>
-                                <Info className="h-3 w-3 text-muted-foreground" />
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p className="max-w-xs">Proportion of variance in the dependent variable predictable from the independent variables</p>
-                              </TooltipContent>
-                            </UITooltip>
-                          </TooltipProvider>
+              {metrics && Object.keys(metrics).length > 0 && (
+                <div>
+                  <h3 className="text-sm font-medium mb-2">Metrics</h3>
+                  <div className="space-y-1">
+                    {Object.entries(metrics).map(([key, value]) => {
+                      // Skip complex metrics or those already shown
+                      if (
+                        typeof value === 'object' || 
+                        key === 'coef' || 
+                        key === 'intercept'
+                      ) return null;
+                      
+                      return (
+                        <div key={key} className="flex justify-between text-sm">
+                          <span className="text-muted-foreground capitalize">
+                            {key.replace(/_/g, ' ')}
+                          </span>
+                          <span className="font-mono">
+                            {typeof value === 'number' && 
+                             (key.includes('accuracy') || key.includes('score')) ? 
+                              (value * 100).toFixed(2) + '%' : 
+                              typeof value === 'number' ? 
+                                value.toFixed(4) : 
+                                String(value)
+                            }
+                          </span>
                         </div>
-                        <span className={getMetricColor("r2_score", metrics.r2_score)}>
-                          {formatValue(metrics.r2_score)}
-                        </span>
-                      </div>
-                      <Progress value={(metrics.r2_score + 1) / 2 * 100} className="h-1.5" />
-                    </div>
-                  )}
-                  
-                  {metrics.mse !== undefined && (
-                    <div className="space-y-1">
-                      <div className="flex justify-between text-sm">
-                        <div className="flex items-center gap-1">
-                          <span>MSE</span>
-                          <TooltipProvider>
-                            <UITooltip>
-                              <TooltipTrigger asChild>
-                                <Info className="h-3 w-3 text-muted-foreground" />
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p className="max-w-xs">Mean Squared Error: Average squared difference between predicted and actual values</p>
-                              </TooltipContent>
-                            </UITooltip>
-                          </TooltipProvider>
-                        </div>
-                        <span className={getMetricColor("mse", metrics.mse)}>
-                          {formatValue(metrics.mse)}
-                        </span>
-                      </div>
-                      <Progress value={Math.max(0, (1 - metrics.mse) * 100)} className="h-1.5" />
-                    </div>
-                  )}
-                </div>
-              )}
-              
-              {isClustering && (
-                <div className="grid grid-cols-2 gap-4">
-                  {metrics.silhouette_score !== undefined && (
-                    <div className="space-y-1">
-                      <div className="flex justify-between text-sm">
-                        <div className="flex items-center gap-1">
-                          <span>Silhouette Score</span>
-                          <TooltipProvider>
-                            <UITooltip>
-                              <TooltipTrigger asChild>
-                                <Info className="h-3 w-3 text-muted-foreground" />
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p className="max-w-xs">Measure of how similar an object is to its own cluster compared to other clusters</p>
-                              </TooltipContent>
-                            </UITooltip>
-                          </TooltipProvider>
-                        </div>
-                        <span className={getMetricColor("silhouette_score", metrics.silhouette_score)}>
-                          {formatValue(metrics.silhouette_score)}
-                        </span>
-                      </div>
-                      <Progress value={(metrics.silhouette_score + 1) / 2 * 100} className="h-1.5" />
-                    </div>
-                  )}
-                  
-                  {metrics.n_clusters !== undefined && (
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm">Clusters:</span>
-                      <span className="font-semibold">{metrics.n_clusters}</span>
-                    </div>
-                  )}
-                </div>
-              )}
-              
-              {model.type === "DL" && (
-                <div className="space-y-4">
-                  <Separator />
-                  <div className="text-sm">Neural Network Architecture</div>
-                  <div className="flex flex-wrap gap-2 items-center">
-                    <div className="bg-muted px-2 py-1 rounded text-xs">
-                      Input ({model.neuralNetworkArchitecture?.[0]?.neurons || "?"})
-                    </div>
-                    {Array.isArray(model.neuralNetworkArchitecture) && 
-                      model.neuralNetworkArchitecture.map((layer, i) => (
-                        <React.Fragment key={i}>
-                          <div className="text-muted-foreground">→</div>
-                          <div className="bg-muted px-2 py-1 rounded text-xs">
-                            {layer.neurons} ({layer.activation})
-                            {layer.dropout ? ` D:${layer.dropout}` : ''}
-                          </div>
-                        </React.Fragment>
-                      ))
-                    }
-                    <div className="text-muted-foreground">→</div>
-                    <div className="bg-muted px-2 py-1 rounded text-xs">
-                      Output (1)
-                    </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}
             </div>
           </TabsContent>
           
-          {featureImportanceData.length > 0 && (
-            <TabsContent value="features" className="pt-4">
-              <div className="h-80">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={featureImportanceData} layout="vertical" margin={{ left: 20 }}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis type="number" />
-                    <YAxis dataKey="feature" type="category" width={150} />
-                    <Tooltip formatter={(value) => [`${value.toFixed(4)}`, 'Importance']} />
-                    <Bar dataKey="importance" fill="#3b82f6" />
-                  </BarChart>
-                </ResponsiveContainer>
+          <TabsContent value="features" className="pt-4">
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-sm font-medium mb-2">Feature Importance</h3>
+                {Object.keys(featureImportance).length > 0 ? (
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart
+                      data={featureImportanceData}
+                      layout="vertical"
+                      margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis type="number" />
+                      <YAxis 
+                        type="category" 
+                        dataKey="feature" 
+                        width={100}
+                      />
+                      <Tooltip 
+                        formatter={(value: number) => value.toFixed(4)}
+                        labelFormatter={(label) => {
+                          const item = featureImportanceData.find(item => item.feature === label);
+                          return item ? item.fullName : label;
+                        }}
+                      />
+                      <Bar dataKey="importance" fill="#3b82f6" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <p className="text-muted-foreground">No feature importance data available.</p>
+                )}
               </div>
-              <div className="mt-4 text-xs text-muted-foreground">
-                Feature importance shows which input variables have the most impact on predictions.
-              </div>
-            </TabsContent>
-          )}
+              
+              {renderAlgorithmDetails()}
+            </div>
+          </TabsContent>
           
-          {confusionMatrix.length > 0 && (
-            <TabsContent value="confusion" className="pt-4">
-              <div className="flex justify-center">
-                <div className="relative overflow-auto border rounded">
-                  <table className="border-collapse">
-                    <thead>
-                      <tr>
-                        <th className="p-2 text-xs text-muted-foreground"></th>
-                        <th className="p-2 text-xs text-muted-foreground" colSpan={confusionMatrix[0]?.length || 0}>Predicted</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {confusionMatrix.map((row, i) => {
-                        const maxValue = Math.max(...confusionMatrix.flat());
-                        return (
-                          <tr key={i}>
-                            {i === 0 && (
-                              <td className="p-2 text-xs text-muted-foreground font-bold" rowSpan={confusionMatrix.length}>
-                                <div className="transform -rotate-90">Actual</div>
-                              </td>
-                            )}
-                            {row.map((value, j) => (
-                              <td 
-                                key={j} 
-                                className="p-4 text-center border"
-                                style={{ 
-                                  backgroundColor: getConfusionMatrixColor(value, maxValue),
-                                  minWidth: '60px'
-                                }}
-                              >
-                                <div className="font-semibold">{value}</div>
-                                <div className="text-xs mt-1">
-                                  {i === j ? (
-                                    <span className="text-green-800">True</span>
-                                  ) : (
-                                    <span className="text-red-800">False</span>
-                                  )}
-                                </div>
-                              </td>
-                            ))}
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+          <TabsContent value="architecture" className="pt-4">
+            <div className="space-y-4">
+              {model.algorithm === "Neural Network" ? (
+                renderNeuralNetworkArchitecture()
+              ) : (
+                <div className="flex flex-col items-center justify-center py-8 text-center">
+                  <Brain className="h-12 w-12 text-muted-foreground mb-2" />
+                  <p className="text-muted-foreground">
+                    Neural network architecture is only available for Neural Network models.
+                  </p>
                 </div>
-              </div>
-              <div className="mt-4 text-xs text-muted-foreground">
-                Confusion matrix shows correct predictions on the diagonal and incorrect predictions elsewhere.
-              </div>
-            </TabsContent>
-          )}
+              )}
+            </div>
+          </TabsContent>
           
-          {Object.keys(metrics).length > 0 && (
-            <TabsContent value="details" className="pt-4">
-              <ScrollArea className="h-64">
-                <div className="space-y-4">
-                  {Object.entries(metrics).map(([key, value]) => (
-                    <div key={key} className="flex justify-between items-center">
-                      <div className="flex items-center gap-1">
-                        <span className="text-sm capitalize">{key.replace(/_/g, ' ')}</span>
-                        <TooltipProvider>
-                          <UITooltip>
-                            <TooltipTrigger asChild>
-                              <HelpCircle className="h-3 w-3 text-muted-foreground" />
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p className="max-w-xs">{getMetricDescription(key)}</p>
-                            </TooltipContent>
-                          </UITooltip>
-                        </TooltipProvider>
-                      </div>
-                      <div className={`text-sm font-semibold ${typeof value === 'number' ? getMetricColor(key, value) : ''}`}>
-                        {typeof value === 'number' 
-                          ? key.includes('accuracy') || key.includes('precision') || key.includes('recall') || key.includes('f1') 
-                            ? `${(value * 100).toFixed(2)}%` 
-                            : formatValue(value)
-                          : String(value)
-                        }
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </ScrollArea>
-            </TabsContent>
-          )}
+          <TabsContent value="performance" className="pt-4">
+            <div className="space-y-4">
+              {isClassificationModel() && renderConfusionMatrix()}
+              
+              {/* Additional performance metrics can be added here */}
+              <div>
+                <h3 className="text-sm font-medium mb-2">Performance Metrics</h3>
+                {metrics && Object.keys(metrics).length > 0 ? (
+                  <div className="grid grid-cols-2 gap-2">
+                    {Object.entries(metrics).map(([key, value]) => {
+                      // Skip complex metrics or those already shown
+                      if (
+                        typeof value === 'object' || 
+                        key === 'coef' || 
+                        key === 'intercept'
+                      ) return null;
+                      
+                      return (
+                        <div key={key} className="bg-muted/30 p-3 rounded-lg">
+                          <div className="text-muted-foreground text-xs capitalize">
+                            {key.replace(/_/g, ' ')}
+                          </div>
+                          <div className="text-lg font-medium mt-1">
+                            {typeof value === 'number' && 
+                             (key.includes('accuracy') || key.includes('score')) ? 
+                              (value * 100).toFixed(2) + '%' : 
+                              typeof value === 'number' ? 
+                                value.toFixed(4) : 
+                                String(value)
+                            }
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground">No detailed performance metrics available.</p>
+                )}
+              </div>
+            </div>
+          </TabsContent>
         </Tabs>
       </CardContent>
     </Card>
   );
-}
-
-// Helper function to get descriptions for metrics
-function getMetricDescription(metricName: string): string {
-  const descriptions: Record<string, string> = {
-    accuracy: "Proportion of correct predictions among the total number of predictions",
-    precision: "Proportion of correct positive predictions out of all positive predictions",
-    recall: "Proportion of actual positives correctly identified",
-    f1_score: "Harmonic mean of precision and recall",
-    r2_score: "Coefficient of determination - proportion of variance predictable from features",
-    mse: "Mean squared error - average of squared differences between predictions and actual values",
-    mae: "Mean absolute error - average of absolute differences between predictions and actual values",
-    silhouette_score: "Measure of how similar an object is to its own cluster compared to other clusters",
-    inertia: "Sum of squared distances of samples to their closest cluster center",
-    n_clusters: "Number of clusters identified",
-    val_accuracy: "Accuracy on validation data during training",
-    val_mae: "Mean absolute error on validation data during training",
-    epochs_used: "Number of training epochs/iterations used",
-    coef: "Model coefficients for features"
-  };
-  
-  return descriptions[metricName] || "Additional metric for model evaluation";
 }

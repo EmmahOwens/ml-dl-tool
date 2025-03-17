@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from "react";
 import { Progress } from "@/components/ui/progress";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -83,55 +84,6 @@ export function TrainingProgress({
       }
     }
   }, [isTraining, status, progress, externalError]);
-  
-  useEffect(() => {
-    let interval: NodeJS.Timeout;
-    
-    if (status === "training" && progress < 100 && externalProgress === undefined) {
-      interval = setInterval(() => {
-        setProgress(prev => {
-          let incrementFactor = 1;
-          if (algorithmType === "Neural Network") {
-            incrementFactor = 0.5;
-          } else if (["Random Forest", "XGBoost", "Gradient Boosting"].includes(algorithmType || "")) {
-            incrementFactor = 0.7;
-          }
-          
-          const increment = Math.random() * 3 * incrementFactor;
-          const newValue = Math.min(prev + increment, 100);
-          
-          if (Math.random() > 0.7) {
-            const epoch = Math.floor(newValue / 5);
-            const accuracy = (0.7 + (newValue / 100) * 0.25).toFixed(4);
-            const loss = (0.8 - (newValue / 100) * 0.6).toFixed(4);
-            
-            let logMessage = "";
-            if (algorithmType === "Neural Network") {
-              logMessage = `Epoch ${epoch}: accuracy=${accuracy}, loss=${loss}`;
-            } else if (["K-Means", "DBSCAN", "PCA"].includes(algorithmType || "")) {
-              logMessage = `Iteration ${epoch}: inertia=${loss}, silhouette=${accuracy}`;
-            } else {
-              logMessage = `Training progress ${newValue.toFixed(1)}%: accuracy=${accuracy}`;
-            }
-            
-            setLogs(prev => [...prev, logMessage]);
-          }
-          
-          if (newValue >= 100) {
-            setStatus("completed");
-            if (startTime) {
-              setTrainingTime(Math.floor((Date.now() - startTime) / 1000));
-            }
-            clearInterval(interval);
-          }
-          
-          return newValue;
-        });
-      }, 300);
-    }
-    
-    return () => clearInterval(interval);
-  }, [status, progress, externalProgress, algorithmType]);
   
   const handlePause = () => {
     setStatus("paused");

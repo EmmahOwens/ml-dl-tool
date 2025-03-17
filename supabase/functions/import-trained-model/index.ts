@@ -9,25 +9,59 @@ serve(async (req) => {
   }
 
   try {
-    const { modelId, datasetName } = await req.json();
+    const { modelId, modelData, datasetName, modelName, algorithm, accuracy, parameters } = await req.json();
     
     console.log(`Importing trained model with ID: ${modelId}`);
     
-    // In a real implementation, you would:
-    // 1. Check if the model exists in Google Drive or Cloud Storage
-    // 2. Download the model file and metadata
-    // 3. Import the model into your database or storage system
+    // Check if we have the required data
+    if (!modelId || !datasetName || !algorithm) {
+      throw new Error("Missing required parameters for model import");
+    }
     
-    // For now, we'll simulate the import with a successful response
-    // and random accuracy between 85-95%
-    const simulatedAccuracy = 0.85 + Math.random() * 0.10;
+    // Get Supabase credentials
+    const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") || "";
+    
+    if (!supabaseUrl || !supabaseAnonKey) {
+      throw new Error("Missing required environment variables: SUPABASE_URL or SUPABASE_ANON_KEY");
+    }
+    
+    // Store the model data in the database
+    const modelInfo = {
+      id: modelId,
+      name: modelName || `Imported ${algorithm} Model`,
+      algorithm: algorithm,
+      accuracy: accuracy || 0.85,
+      dataset_name: datasetName,
+      type: algorithm === "Neural Network" ? "DL" : "ML",
+      parameters: parameters || {},
+      model_data: modelData || null,
+      is_trained: true
+    };
+    
+    // Insert into the database
+    const response = await fetch(`${supabaseUrl}/rest/v1/models`, {
+      method: "POST",
+      headers: {
+        "apikey": supabaseAnonKey,
+        "Authorization": `Bearer ${supabaseAnonKey}`,
+        "Content-Type": "application/json",
+        "Prefer": "return=minimal"
+      },
+      body: JSON.stringify(modelInfo)
+    });
+    
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Failed to import model: ${error}`);
+    }
     
     return new Response(
       JSON.stringify({
         success: true,
         modelId,
-        accuracy: simulatedAccuracy,
-        message: "Model imported successfully from Google Colab"
+        accuracy: modelInfo.accuracy,
+        message: "Model imported successfully"
       }),
       {
         headers: {
