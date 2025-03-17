@@ -68,7 +68,7 @@ interface ModelContextType {
   refreshModels: () => Promise<void>;
   fineTuneModel: (id: string, options: FineTuneOptions) => Promise<void>;
   downloadModel: (id: string, fileExtension?: string) => Promise<void>;
-  predictWithModel: (id: string, inputData: any[]) => Promise<{ predictions: any; success: boolean }>;
+  predictWithModel: (id: string, inputData: any[]) => Promise<{ predictions: any; success: boolean; explanation?: any }>;
 }
 
 // Options for fine-tuning a model
@@ -281,6 +281,11 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({
         return;
       }
       
+      // Extract metrics from parameters if they exist
+      const metrics = modelData.parameters?.metrics || {};
+      const featureImportance = modelData.parameters?.feature_importance || {};
+      const confusionMatrix = modelData.parameters?.confusion_matrix || null;
+      
       // Transform our model data to Supabase format with proper JSON serialization
       const supabaseData = {
         name: modelData.name,
@@ -288,11 +293,17 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({
         algorithm: modelData.algorithm,
         accuracy: modelData.accuracy,
         dataset_name: modelData.datasetName,
-        parameters: modelData.parameters ? JSON.stringify(modelData.parameters) : null,
+        parameters: {
+          ...modelData.parameters,
+          metrics,
+          feature_importance: featureImportance,
+          confusion_matrix: confusionMatrix
+        },
         neural_network_architecture: modelData.neuralNetworkArchitecture ? 
           JSON.stringify(modelData.neuralNetworkArchitecture) : null,
         targets: modelData.targets ? 
           JSON.stringify(modelData.targets) : null,
+        is_trained: true
       };
       
       const { data, error } = await supabase
@@ -312,7 +323,7 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({
         accuracy: Number(data.accuracy),
         created: new Date(data.created_at),
         datasetName: data.dataset_name,
-        parameters: data.parameters ? (typeof data.parameters === 'string' ? JSON.parse(data.parameters) : data.parameters) : {},
+        parameters: data.parameters || {},
         neuralNetworkArchitecture: data.neural_network_architecture ? 
           (typeof data.neural_network_architecture === 'string' ? 
             JSON.parse(data.neural_network_architecture) : 
@@ -631,7 +642,7 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({
   };
 
   // Add the new predictWithModel function
-  const predictWithModel = async (id: string, inputData: any[]): Promise<{ predictions: any; success: boolean }> => {
+  const predictWithModel = async (id: string, inputData: any[]): Promise<{ predictions: any; success: boolean; explanation?: any }> => {
     try {
       const model = getModelById(id);
       
@@ -662,9 +673,11 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({
       
       const result = await response.json();
       
-      // Return the predictions
+      // Return the predictions and explanation if available
       return {
         predictions: result.predictions,
+        probabilities: result.probabilities,
+        explanation: result.explanation,
         success: true
       };
     } catch (error) {

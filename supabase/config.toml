@@ -2,7 +2,6 @@
 project_id = "uysdqwhyhqhamwvzsolw"
 
 [api]
-# Remove the invalid "enabled_schemas" key and use proper configuration
 port = 54321
 schemas = ["public", "storage"]
 extra_search_path = ["public", "extensions"]

@@ -15,11 +15,33 @@ serve(async (req) => {
     console.log(`Making prediction with model ${modelId}`);
     console.log(`Input data: ${JSON.stringify(inputData)}`);
     
+    // Fetch the model from the database
+    const supabaseUrl = Deno.env.get("SUPABASE_URL") || "https://uysdqwhyhqhamwvzsolw.supabase.co";
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") || "";
+    
+    const response = await fetch(`${supabaseUrl}/rest/v1/models?id=eq.${modelId}&select=*`, {
+      headers: {
+        "apikey": supabaseAnonKey,
+        "Authorization": `Bearer ${supabaseAnonKey}`
+      }
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch model: ${response.statusText}`);
+    }
+    
+    const models = await response.json();
+    if (!models || models.length === 0) {
+      throw new Error(`Model with ID ${modelId} not found`);
+    }
+    
+    const model = models[0];
+    
     // Create temporary Python script for prediction
     const tempScriptPath = await Deno.makeTempFile({suffix: ".py"});
     
     // Generate Python script for prediction
-    const pythonScript = generatePredictionScript(modelId, inputData);
+    const pythonScript = generatePredictionScript(model, inputData);
     
     // Write the Python script to the temporary file
     await Deno.writeTextFile(tempScriptPath, pythonScript);
@@ -58,6 +80,8 @@ serve(async (req) => {
       }
       
       const predictions = result.predictions || [];
+      const probabilities = result.probabilities || [];
+      const explanation = result.explanation || null;
       
       // Clean up the temporary file
       await Deno.remove(tempScriptPath);
@@ -66,6 +90,8 @@ serve(async (req) => {
         JSON.stringify({
           success: true,
           predictions,
+          probabilities,
+          explanation,
           message: "Prediction completed successfully"
         }),
         {
@@ -86,38 +112,7 @@ serve(async (req) => {
         console.error("Error cleaning up temporary file:", cleanupError.message);
       }
       
-      // Fallback to simulation if Python execution fails
-      console.log("Falling back to prediction simulation");
-      
-      // For this simulation, we'll generate mock predictions
-      const predictions = Array.isArray(inputData) ? inputData.map(row => {
-        // Create realistic predictions based on input
-        if (Array.isArray(row) && typeof row[0] === 'number') {
-          // For regression-like problems
-          return parseFloat((Math.sin(row[0]) * 5 + 3 + Math.random()).toFixed(2));
-        } else {
-          // For classification-like problems
-          const classes = ["class_a", "class_b", "class_c"];
-          return classes[Math.floor(Math.random() * classes.length)];
-        }
-      }) : [];
-      
-      console.log(`Simulated prediction result: ${JSON.stringify(predictions)}`);
-      
-      return new Response(
-        JSON.stringify({
-          success: true,
-          predictions,
-          message: "Prediction completed successfully (simulated fallback)"
-        }),
-        {
-          headers: {
-            ...corsHeaders,
-            "Content-Type": "application/json",
-          },
-          status: 200,
-        }
-      );
+      throw new Error(`Prediction failed: ${execError.message}`);
     }
   } catch (error) {
     console.error("Error making prediction:", error.message);
@@ -138,55 +133,77 @@ serve(async (req) => {
 });
 
 // Helper function to generate Python prediction script
-function generatePredictionScript(modelId, inputData) {
-  // This is a simplified example. In a real implementation, you would:
-  // 1. Load the model from a database or storage
-  // 2. Use the loaded model to make predictions
+function generatePredictionScript(model, inputData) {
+  const { algorithm, model_data } = model;
   
   const script = `
 import json
+import pickle
+import base64
 import numpy as np
+import pandas as pd
+from io import BytesIO
 from sklearn.preprocessing import StandardScaler
 
-# Mock model that mimics loading a model from storage
-class MockModel:
-    def predict(self, X):
-        # This is just a placeholder. In a real implementation, 
-        # the actual model would be loaded and used for prediction.
-        if X.shape[1] > 0 and isinstance(X[0, 0], (int, float)):
-            # For regression-like problems
-            return np.sin(X[:, 0]) * 5 + 3 + np.random.random(X.shape[0])
-        else:
-            # For classification-like problems
-            classes = ["class_a", "class_b", "class_c"]
-            return np.random.choice(classes, size=X.shape[0])
+# Load model from base64 string
+model_base64 = """${model_data || ''}"""
+if model_base64:
+    try:
+        model_bytes = BytesIO(base64.b64decode(model_base64))
+        model = pickle.load(model_bytes)
+    except Exception as e:
+        print(json.dumps({
+            "error": f"Failed to load model: {str(e)}"
+        }))
+        exit(1)
+else:
+    print(json.dumps({
+        "error": "No model data available"
+    }))
+    exit(1)
 
 # Load input data
 input_data = ${JSON.stringify(inputData)}
+
+# Convert input data to numpy array
 X = np.array(input_data)
 
-# Standardize the input data
+# Standardize the input data (using same approach as during training)
 scaler = StandardScaler()
 X_scaled = scaler.fit_transform(X)
 
-# Load the model (in a real implementation, this would load from storage)
-model = MockModel()
-
 # Make predictions
-predictions = model.predict(X_scaled)
-
-# Convert predictions to serializable format
-if isinstance(predictions, np.ndarray):
-    if predictions.dtype == np.float64 or predictions.dtype == np.float32:
-        predictions = [float(p) for p in predictions]
+try:
+    # Check if model has predict_proba method (classification)
+    if hasattr(model, 'predict_proba'):
+        predictions = model.predict(X_scaled).tolist()
+        probabilities = model.predict_proba(X_scaled).tolist()
     else:
-        predictions = [str(p) for p in predictions]
-
-# Output results as JSON
-result = {
-    "predictions": predictions
-}
-print(json.dumps(result))
+        # For regression models
+        predictions = model.predict(X_scaled).tolist()
+        probabilities = []
+    
+    # Generate simple explanation if possible
+    explanation = None
+    if hasattr(model, 'feature_importances_'):
+        # For tree-based models
+        explanation = {"feature_importance": model.feature_importances_.tolist()}
+    elif hasattr(model, 'coef_'):
+        # For linear models
+        explanation = {"coefficients": model.coef_.tolist()}
+    
+    # Output results as JSON
+    result = {
+        "predictions": predictions,
+        "probabilities": probabilities,
+        "explanation": explanation
+    }
+    print(json.dumps(result))
+except Exception as e:
+    print(json.dumps({
+        "error": f"Prediction failed: {str(e)}"
+    }))
+    exit(1)
 `;
 
   return script;
